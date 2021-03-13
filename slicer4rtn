@@ -1,0 +1,737 @@
+#!/usr/bin/perl
+
+# == Slicer 4 Rotating Tilted Nozzle (RTN) 4-Axis Setup ==
+#    written by Rene K. Mueller <contact@xyzdims.com>
+#
+# License: LGPLv3 (see LICENSE file)
+#
+# Description:
+#   It provides simple conic slicer using ordinary slicer like Slic3r.
+#
+#   For technical details see at 
+#        https://xyzdims.com/2021/02/26/3d-printing-conic-slicing-for-rotating-tilted-nozzle-rtn/
+#     and
+#        https://github.com/Spiritdude/Slicer4RTN
+#
+# History:
+# 2021/03/12: 0.3.1: changing rot-offset 0 => 90
+# 2021/03/11: 0.3.0: version bump with various cleanups, more consistent settings, --inter-steps added
+# 2021/03/11: 0.2.6: diverse new settings: rot_gcode, rot_offset, rot_revolv, tilt_gcode and layer-height which is computed for core-slicer
+# 2021/03/10: 0.2.5: added main $efa multiplier depends on angle, not yet sure if it's correct
+# 2021/03/08: 0.2.4: making arguments for core slicer easier, --slicer.<k>=<v> as well --<k>=<v> works (better for print3r integration)
+# 2021/03/07: 0.2.3: simplifying code, extrusion interpolation still off (needs reworking)
+# 2021/03/06: 0.2.0: changing extrusion calculation, better apprx., flow_rate => erate
+# 2021/03/04: 0.1.1: properly re-offset G-code output from slic3r and prusa-slicer as it centers model, early support for prusa-slicer
+# 2021/03/01: 0.1.0: new --slicer.key=val added, added --zoff=val to re-adjust zoffset in final G-code
+# 2021/02/28: 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change change of cone
+# 2021/02/26: 0.0.4: added --mode=outside or inside to reverse order for inside/outside-cone printing
+# 2021/02/25: 0.0.3: moving stl2rtn and gcodertn into slicer4rtn
+# 2021/02/24: 0.0.2: bug fixed, much better G-gcode output, viewable by Cura
+# 2021/02/23: 0.0.1: first functional version, various bugs
+
+use strict;
+use Math::Trig;
+#use JSON;
+
+my $APPNAME = 'Slicer4RTN';
+my $VERSION = '0.3.2';
+
+my($app) = ($0=~/\/([^\/]+)$/);
+
+my $conf = {
+   core_slicer => 'slic3r',
+   mode => 'outside',
+   axis => 4,
+   angle => 45,
+   center => "0,0",
+   bed_center => "100,100",
+   layer_height => 0.2,
+   zoff => 0,
+   max_speed => 0,
+   motion_minz => 0.2,
+   erate => 1.0,
+   efmax => 3,
+   efmin => 0.01,
+   inter_steps => 2,
+   subdivide => 2,
+   keep => 0,
+   verbose => 0,
+   recenter => 0,
+   rot_gcode => 'A',
+   rot_revolv => 1,
+   rot_offset => 90,
+   tilt_gcode => 'B'
+};
+my @fs;
+
+my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
+my(@slicer_args);
+
+foreach(@ARGV) {
+   my($k,$v);
+   $k = $2, $v = $3, push(@slicer_args,"--$k=$v"), next if(/^--(slicer|slic3r|cura)\.([\w\-]+)=(.*)/);
+   if(/^--([\w\-]+)=(.*)/) {
+      $k = $1, $v = $2;
+      my $k_ = $k; $k_ =~ s/\-/_/g;
+      if(!defined $conf->{$k_} && $k ne 'output') {
+         push(@slicer_args,"--$k=$v") 
+      } else {
+         $conf->{$k_} = $v;
+      }
+      next;
+   }
+   $k = $1, $k =~ s/\-/_/g, $conf->{$k}++, next if(/^--([\w\-]+)/);
+   if(/^-(\w+)/) {
+      foreach(split(/|/,$1)) {
+         $conf->{defined $sf2l{$_} ? $sf2l{$_} : $_}++;
+      }
+      next;
+   }
+   push(@fs,$_);
+}
+
+if($conf->{version}) {
+   print "$APPNAME $VERSION\n";
+   exit 0;
+}
+
+# -- now we know core-slicer, add important settings
+if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
+   push(@slicer_args,'--gcode-comments','--skirts=0', '--fill-pattern=rectilinear', 
+      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').$conf->{center},
+      '--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
+   push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
+   push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
+   foreach my $s (qw('slic3r','prusa-slicer')) {
+      push(@slicer_args,"---load=.config/slicer4rtn/$s.ini") if(-e ".config/slicer4rtn/$s.ini");
+   }
+} elsif($conf->{core_slicer} =~ /mandoline/) {
+   push(@slicer_args,'-S','layer-height='.$conf->{layer_height}/cos($conf->{angle}));
+   push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
+}
+
+if($conf->{help} || @fs <= 0) {
+   print "USAGE $APPNAME $VERSION: [<opts>] <file.stl> ...
+   options:
+      -v or --verbose      increase verbosity
+      --version            display version and exit
+      -k or --keep         keep all temporary files (temp.stl, temp.gcode)
+      --subdivide=<n>      set midpoint subdivisions (default: $conf->{subdivide})
+      --mode=<mode>        set cone mode, either 'outside' or 'inside' (default: '$conf->{mode}')
+      --output=<fname>     override default naming convention file.stl -> file.gcode
+      --axis=<axis>        set axis count of printer: 3, 4 or 5 (default: $conf->{axis})
+      --angle=<angle>      set angle of cone (default: $conf->{angle})
+      --center=<cx,cy>     set conic slicing center (default: $conf->{center})
+      --bed-center=<cx,cy> set bed-enter, only affects output G-code (default: $conf->{bed_center})
+      --layer-height=<z>   set conic layer height (default: $conf->{layer_height})
+      --rot-gcode=<v>      set G-code symbol for rotation (default: $conf->{rot_gcode})
+      --rot-revolv=<mode>  set rotation revolution, 0 = unlimited, 1 = once (default: $conf->{rot_revolv})
+      --rot-offset=<a>     set rotation offset (default: $conf->{rot_offset})
+      --tilt-gcode=<v>     set G-code symbol for tilt for 5-axis operation (default: $conf->{tilt_gcode})
+      --rot-fixed=<angle>  set fixed rotation angle, usable if --axis=3 but 4-axis or 5-axis printer is target
+      --zoff=<v>           set z-offset, will be added to G1 ... Z<v>
+      --erate=<f>          set extrusion rate (multiplier, default: $conf->{erate})
+      --efmin=<v>          set extrusion factor minimum, (default: $conf->{efmin})
+      --efmax=<v>          set extrusion factor maximum, (default: $conf->{efmax})
+      --inter-steps=<n>    set interpolation steps per mm (default: $conf->{inter_steps})
+      --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: $conf->{motion_minz})
+      --max-speed=<s>      set maximum speed (default: $conf->{max_speed})
+      --recenter           recenter model X- & Y-wise
+      --core-slicer=<slicer> set slicer (default: '$conf->{core_slicer}')
+      --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
+      --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{core_slicer})
+      
+   examples:
+      $app sphere.stl
+      $app overhang.stl --output=sample.gcode
+      $app overhang.stl --axis=5 --output=sample.gcode
+      $app overhang.stl --axis=3 --output=sample-belt-printer.gcode --fill-density=5
+      $app model-6.stl --angle=25 --subdivide=5
+
+";
+   exit 0;
+}
+
+my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
+
+foreach my $fn (@fs) {
+   my $t = time();
+
+   unless(-e $fn) {
+      print STDERR "$APPNAME ERROR: file not accessible '$fn'\n";
+      exit -1;
+   }
+   
+   print "$APPNAME: processing '$fn'\n";
+
+   print "$APPNAME:    #1/5 read stl\n";
+   my $m = readSTL($fn);
+
+   for(my $n=1; $n<=$conf->{subdivide}; $n++) {
+      print "$APPNAME:       #$n/$conf->{subdivide} subdivide ";
+      $m = subdivideModel($m);
+      writeSTLB("temp-subdivided-premap.stl",$m) if($conf->{keep});
+   }
+   print "$APPNAME:    #2/5 map vertices\n";
+
+   measureModel($m);
+   recenterModel($m) if($conf->{recenter});
+   
+   mapVertices($m);
+
+   print "$APPNAME:    #3/5 write temporary stl\n";
+   writeSTLB("temp.stl",$m);
+
+   print "$APPNAME:    #4/5 slice stl\n";
+   if(fork()==0) {
+      print "$APPNAME INF: $conf->{core_slicer} @slicer_args -o temp.gcode temp.stl\n" if($conf->{verbose});
+      exec($conf->{core_slicer},@slicer_args,"-o","temp.gcode","temp.stl");
+      exit 0;
+   }
+   wait;
+   if(!-e "temp.gcode") {
+      print "$APPNAME ERROR: slicer did not generate any gcode, abort\n";
+      exit -1;
+   }
+   my $fo = $fn;
+
+   $fo =~ s/\.(stl|amf|obj|off|3mf)$/.gcode/i;
+   $fo .= ".gcode" unless($fo=~/\.gcode$/i);
+   
+   $fo = $conf->{output} if($conf->{output});
+   print "$APPNAME:    #5/5 remap gcode to '$fo'\n";
+
+   mapGcode("temp.gcode",$fo,$m);
+
+   unless($conf->{keep}) {
+      unlink "temp.stl";
+      unlink "temp.gcode";
+   }
+   $t = time()-$t;
+   print "$APPNAME: ".sprintf("took %d sec%s total, done.\n",$t,$t>1?"s":"");
+}
+
+sub conicSpaceMapping {
+   my($cx,$cy,$x,$y,$z,$dir) = @_;
+   my $dx = $x-$cx; 
+   my $dy = $y-$cy;
+   my $d = sqrt($dx*$dx + $dy*$dy);
+   my $rot = atan2($dy,$dx)/pi()*180;     # -180 .. 180
+
+   $d = -$y, $rot = 90 if($conf->{axis}==3);
+   $d *= tan($conf->{angle}/180*pi());
+   
+   $rot = $rot + 180 if($conf->{mode}eq'inside');
+   
+   # -- marlin doesn't like too many decimals behind '.'
+   $rot = sprintf("%.3f",$rot);
+   
+   return ($x,$y,sprintf("%.5f",$dir eq "direct" ? $z-$d : $z+$d),$rot);
+}
+
+sub measureModel {
+   my($m) = @_;
+   my(@min,@max);
+   @min = (1e38,1e38,1e38);
+   @max = (-1e38,-1e38,-1e38);
+   foreach my $p (@{$m->{vertices}}) {
+      for(my $i=0; $i<3; $i++) {
+         $min[$i] = $p->{c}->[$i] if($min[$i]>$p->{c}->[$i]);
+         $max[$i] = $p->{c}->[$i] if($max[$i]<$p->{c}->[$i]);
+      }
+   }
+   $m->{size} = [ $max[0]-$min[0], $max[1]-$min[1], $max[2]-$min[2] ];
+   $m->{min} = \@min;
+   $m->{max} = \@max;
+   #print to_json([$m->{size},$m->{min},$m->{max}]);
+}
+
+sub recenterModel {
+   my($m) = @_;
+   foreach my $v (@{$m->{vertices}}) {
+      $v->{c}->[0] -= ($m->{max}->[0]+$m->{min}->[0])/2;
+      $v->{c}->[1] -= ($m->{max}->[1]+$m->{min}->[1])/2;
+      #print "OUT: $v->{c}->[0],$v->{c}->[1],$v->{c}->[2]\n";
+   }
+   measureModel($m);
+}
+
+sub mapVertices {
+   my($m) = @_;
+   foreach my $v (@{$m->{vertices}}) {
+      #print "IN: $v->{c}->[0],$v->{c}->[1],$v->{c}->[2]\n";
+      my($x1,$y1,$z1) = conicSpaceMapping(0,0,$v->{c}->[0],$v->{c}->[1],$v->{c}->[2],$conf->{mode}eq'inside'?'direct':'inverse');
+      $v->{c}->[0] = $x1;
+      $v->{c}->[1] = $y1;
+      $v->{c}->[2] = $z1;
+      #print "OUT: $v->{c}->[0],$v->{c}->[1],$v->{c}->[2]\n";
+   }
+}
+
+sub mapGcode {
+   my($fn,$fo,$m) = @_;
+   my $z = 0;
+   my($lx,$ly,$lz,$le) = (0,0,0,0);
+
+   my $mo = $conf->{mode}eq'inside'?'inverse':'direct';
+   my $zoff = 0;    
+   my $xtr = $conf->{axis}==5 || $conf->{rot_fixed} ? $conf->{tilt_gcode}.$conf->{angle}." " : "";
+   my($xoff,$yoff) = split(/,/,$conf->{bed_center});
+   my $ln = 0;
+   
+   my($lxc,$lyc,$lzc) = (0,0,0,0);    # -- last conic coordinates
+   my $eabs = 0;        # -- this is the conic E
+   my $ef = 1;          # -- this is the current E factor (changes)
+   my $rabs = 0;        # -- rotation angle absolute (for rot_revolv=0 unlimited revolutions)
+
+   $rabs = 0;
+   
+   # == Slic3r & PrusaSlicer ==
+   # Original STL: is not centered, but with defined conic center
+   # G-code output: it centers x/y-wise
+   #   hence, we need to change xoff,yoff to recenter according original STL
+   #
+   #           STL                  G-code
+   #     XXXXXXXXXXXXXXXXX    XXXXXXXXXXXXXXXXX
+   #     XXX                  XXX     |
+   #      |                   a|--b---|---c----
+   #      0                           0
+   #
+   #     resolve for b:  b = tot - a - c
+   #                   off = tot - min - tot/2
+   
+   my($ixoff,$iyoff) = (0,0);
+   $ixoff = $m->{size}[0] - abs($m->{min}[0]) - $m->{size}[0] / 2;
+   $iyoff = $m->{size}[1] - abs($m->{min}[1]) - $m->{size}[1] / 2;
+   #print "==> $ixoff, $iyoff\n";
+   #print to_json([$m->{size},$m->{min},$m->{max}],{canonical=>1,pretty=>1});
+   
+   if(1) {     # -- we determine the Z minimum of to be expected final G-code output
+      open(my $fh,"<",$fn) || die "$APPNAME: cannot read '$fn'\n";
+      my($c);
+      my($zmin,$zmax) = (1e38,-1e38);
+      while(<$fh>) {
+         next if(/^\s*;/);
+         my $l = $_;
+         if(/^G1 /) {
+            my $s;
+            while(s/ ([XYZ])([\-\d\.]+)//) {
+               $c->{$1} = $2;
+               $s++;
+            }
+            if($s && / E([\d\.]+)/) {     # -- only consider actual positive extrusion coordinates
+               if(defined $c->{X} && defined $c->{Y} && defined $c->{Z}) {
+                  my($x1,$y1,$z1) = conicSpaceMapping($cx,$cy,$c->{X}+$ixoff,$c->{Y}+$iyoff,$c->{Z},$mo);
+                  if($zmin>$z1) {
+                     $zmin = $z1;
+                     print "$APPNAME: zmin calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
+                  }
+                  if($zmax<$z1) {
+                     $zmax = $z1;
+                     print "$APPNAME: zmax calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
+                  }
+               }
+            }
+         }
+      }
+      print "$APPNAME INF: zmin = $zmin\n" if($conf->{verbose});
+      print "$APPNAME INF: zmax = $zmax\n" if($conf->{verbose});
+      $zoff = -$zmin;        # -- that will become the negative z-offset => move transformed piece back to z=0
+      close $fh;
+   }
+
+   open(my $fh,"<",$fn) || die "$APPNAME: ERROR: cannot read '$fn'\n";
+   open(my $fho,">",$fo) || die "$APPNAME: ERROR: cannot write '$fo'\n";
+   print $fho "; == $APPNAME $VERSION by XYZdims.com ==\n; Date: ".scalar localtime()."\n; Settings:\n";
+   foreach my $k (sort keys %$conf) {
+      print $fho ";   $k = $conf->{$k}\n";
+   }
+   print $fho "; Slicer-specific settings: ".join(' ',map{ "'$_'" } @slicer_args)."\n";
+   print $fho ";\n";
+
+   if(defined $conf->{start_gcode}) {
+      print $fho "; slicer4rtn start-gcode:\n";
+      my $g = "$conf->{start_gcode}\n";
+      $g =~ s/\\n/\n/g;
+      print $fho "$g\n";
+   }
+
+   my $ln = 0;
+   my $zcmax = 0;
+
+   my $efa = cos($conf->{angle}/180*pi())**2;         # -- this is the main extrusion correction ratio (multiplier)
+
+   my $first_move_done = 0;
+
+   while(<$fh>) {
+      chop;
+      # -- IMPORTANT:
+      #    $x,$y,$z,$e are original G-code values (not conic space transformed)
+      #    $lx,$ly,$lz,$le are the "last" values, also in original G-code values (not conic space transformed)
+      #        do not alter them, read-only
+      #    $x0,$y0,$z0 or $x1,$y1,$z1 are temporary variables 
+      #    $lxc,$lyc,$lzc are the last conic coords
+      #
+      #    *** DO NOT MIX THOSE, otherwise you create a mess (literally on your printbed) ***
+      
+      print $fho "; $_\n" if(/^G[01] /);     # -- maintain original unlatered G-code (for now)
+
+      if(/^G[01] X([\-\d\.]+) Y([\-\d\.]+)(.*)$/) {      # -- moving X/Y in the vertical layer
+         my($x,$y,$r) = ($1,$2,$3);
+
+         if(1 && $r =~ / Z([\-\d\.]+)/) {       # -- slic3r doesn't use X, Y and Z, only G1 Z.. for layer change
+            $z = $1;
+            $r =~ s/ Z[\-\d\.]+//;
+         }
+         if(1 && $r =~ / F([\-\d\.]+)/ && $1 > $conf->{max_speed} && $conf->{max_speed} && $r =~ / E[\-\d\.]+/) {    
+            $r =~ s/F[\-\d\.]+/F$conf->{max_speed}/;
+         }
+         
+         my($d) = sqrt(($x-$lx)*($x-$lx)+($y-$ly)*($y-$ly)+($z-$lz)*($z-$lz));
+
+         if($r =~ / E([\-\d\.]+)/) {         # -- extruding
+            my $e = $1;
+            my $steps = int($d*$conf->{inter_steps}+1);
+
+            $steps = 2 if($steps<2);
+            $steps = 2 if($d<2);
+
+            $r =~ s/ E[\-\d\.]+//;  # -- remove E.. from $r(est), we add it again with new value
+
+            for(my $n=1; $n<=$steps; $n++) {       # -- single G1 extrusion segment will be sub-segmented in $steps
+               my $f = $n/$steps;      # -- fader 1.0/steps .. 1.0
+               my($x0,$y0,$z0,$e0) = ((1-$f)*$lx + $f*$x, (1-$f)*$ly + $f*$y, (1-$f)*$lz + $f*$z, (1-$f)*$le + $f*$e);
+
+               # -- marlin has problems with too long numbers behind '.', we cut it off
+               $x0 = sprintf("%.5f",$x0);
+               $y0 = sprintf("%.5f",$y0);
+               $e0 = sprintf("%.5f",$e0);
+
+               $x0 += $ixoff; $y0 += $iyoff;    # -- realign G-code coords before remapping again
+
+               my($x1,$y1,$z1,$rot) = conicSpaceMapping($cx,$cy,$x0,$y0,$z0,$mo);
+
+               $x1 += $xoff;
+               $y1 += $yoff;
+               $z1 += $zoff;
+               $z1 += $conf->{zoff};
+
+               $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
+               $rot = $rabs if($conf->{rot_revolv}==0);
+               $rot += $conf->{rot_offset};
+               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
+
+               $z1 = sprintf("%.5f",$z1);
+
+               if(1) {
+                  # -- I'm aware $do does not need to be calculated here (can move outside of for() but I keep it here until interpolation calculation is finalized)
+                  my $do = sqrt(($lx-$x)*($lx-$x)+($ly-$y)*($ly-$y)+($lz-$z)*($lz-$z)) / $steps;      # -- distance original / step
+                  my $dc = sqrt(($lxc-$x1)*($lxc-$x1)+($lyc-$y1)*($lyc-$y1)+($lzc-$z1)*($lzc-$z1));   # -- distance conic delta / step
+
+                  # -- we interpolate extrusion * conic-travel-distance / original-travel-distance; $eabs = absolute extrusion
+                  $ef = $dc / (abs($do)>0.0001 ? $do : 1);
+                  $ef = $conf->{efmax} if($ef>$conf->{efmax});
+                  $ef = $conf->{efmin} if($ef<$conf->{efmin});
+
+                  my $ed = ($e - $le) / $steps * $ef * $efa * $conf->{erate}; $eabs += $ed;
+
+                  print $fho "; do=$do, dc=$dc, ef=$ef ed=$ed\n" if($conf->{verbose});
+                  $eabs = sprintf("%.5f",$eabs);
+
+                  print $fho "G1 X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion $f ($n of $steps)\n";
+
+                  $lxc = $x1; $lyc = $y1; $lzc = $z1;
+
+                  $zcmax = $z1 if($zcmax < $z1);      # -- track highest point of actual print
+
+               } else {
+                  $e0 *= $conf->{erate};
+                  print $fho "G1 X$x1 Y$y1 Z$z1 E$e0 A$rot $xtr$r; extrusion $f ($n of $steps)\n";
+               }
+               $r =~ s/F[\-\d\.]+//;      # -- for next segments do not need feed rate (speed) anymore
+            }
+
+            $lx = $x;
+            $ly = $y;
+            $lz = $z;
+            $le = $e;
+
+         } else {     # -- motion without extrusion (important to cone map as well, otherwise nozzle crashed into existing prints)
+            my $steps = $first_move_done ? 3 : 1;        # -- first move perform motion direct, otherwise conic mapped
+            my $e = 0;
+            print $fho "; from $lz to $z (zoff=$zoff,conf.zoff=$conf->{zoff})\n" if($conf->{verbose});
+
+            for(my $n=1; $n<=$steps; $n++) {
+               my $f = $n/$steps;
+               my($x0,$y0,$z0,$e0) = ((1-$f)*$lx + $f*$x, (1-$f)*$ly + $f*$y, (1-$f)*$lz + $f*$z, (1-$f)*$le + $f*$e);
+               
+               $x0 += $ixoff; $y0 += $iyoff;
+               
+               my($x1,$y1,$z1,$rot) = conicSpaceMapping($cx,$cy,$x0,$y0,$z0,$mo);
+               
+               $x1 += $xoff;
+               $y1 += $yoff;
+               $z1 += $zoff;
+               $z1 += $conf->{zoff};
+               
+               $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
+               $rot = $rabs if($conf->{rot_revolv}==0);
+               $rot += $conf->{rot_offset};
+               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
+               
+               $z1 = sprintf("%.5f",$z1);
+               $z1 = $conf->{motion_minz} if($z1 < $conf->{motion_minz});
+               print $fho "G1 X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion $f ($n of $steps)\n";
+               $lxc = $x1; $lyc = $y1; $lzc = $z1;
+               $r =~ s/F[\-\d\.]+//;            # -- for next segments do not need feed rate (speed) anymore
+            }
+            $first_move_done++ unless($first_move_done);
+               
+            $lx = $x;
+            $ly = $y;
+            $lz = $z;
+         }
+      } elsif(/^G1 / && /Z([\-\d\.]+)(.*)/) {          # -- just layer change: update z only
+         $z = $1;
+         $lz = $z;
+         $ln++;
+         #print $fho "M117 Layer #$ln\n";
+         #print $fho ";LAYER:$ln\n";                    # -- make it look like Cura G-code
+         
+      } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.+)/) {      # -- slic3r: retract absolute
+         my($p,$r) = ($1,$3);
+         my $e = $2;
+         my $e0 = $e*$conf->{erate};               
+         my $ed = ($e - $le) * $efa * 1; $eabs += $ed;
+         #print $fho "${p}E$e0$r; direct.c\n";
+         print $fho "${p}E$eabs$r; direct.c\n";
+         $le = $e;
+
+      } elsif(/^G92 E0 /) {                            # -- reset extruding count
+         print $fho "$_\n";
+         $le = 0;
+         $eabs = 0;
+
+      } elsif(/^G28 / && $ln > 100) {                  # -- end of print?
+         $zcmax += 0.5;
+         # -- end of print MAY NOT at the highest point, and G28 X might crash into the existing piece
+         #    therefore we move nozzle up Z of maximum of print plus 0.5mm more and that is a safe place now
+         print $fho "G1 Z$zcmax ; lift nozzle to max of Z of actual print\n"; 
+         print $fho "$_\n";
+         
+      } else {                                         # -- all the rest of G-code pass on unaltered
+         print $fho "$_\n";
+      }
+      $ln++;
+   }      
+   
+   if(defined $conf->{end_gcode}) {
+      print $fho "; slicer4rtn end-gcode:\n";
+      my $g = "$conf->{end_gcode}\n";
+      $g =~ s/\\n/\n/g;
+      print $fho "$g\n";
+   }
+
+   close $fh;
+   close $fo;
+}
+
+sub subdivideModel {
+   my($m) = @_;
+   my $mn = { volumes => [ { triangles => [ ] } ] , vertices => [ ] };
+
+   my $vn = 0;
+   foreach my $v (@{$m->{vertices}}) {       # -- copy vertices
+      push(@{$mn->{vertices}},$v);
+      $vn++;
+   }
+   foreach my $f (@{$m->{volumes}->[0]->{triangles}}) {
+      my $pn0 = $f->{v}->[0];
+      my $pn1 = $f->{v}->[1];
+      my $pn2 = $f->{v}->[2];
+      my($p0,$p1,$p2) = ($m->{vertices}->[$pn0]->{c},$m->{vertices}->[$pn1]->{c},$m->{vertices}->[$pn2]->{c});
+
+      my $m0 = midpoint($p0,$p1);
+      my $m1 = midpoint($p1,$p2);
+      my $m2 = midpoint($p2,$p0);
+
+      push(@{$mn->{vertices}},{c=>$m0}); # 0
+      push(@{$mn->{vertices}},{c=>$m1}); # 1
+      push(@{$mn->{vertices}},{c=>$m2}); # 2
+      
+      #           p0
+      #          / \
+      #         / a \
+      #     2/m2.....m0/0
+      #       /.     .\
+      #      /  . d .  \
+      #     / c  . . b  \
+      #    p2----m1-----p1
+      #          /1
+      
+      push(@{$mn->{volumes}->[0]->{triangles}},{ v => [$pn0, $vn+0, $vn+2] });  # a
+      push(@{$mn->{volumes}->[0]->{triangles}},{ v => [$vn+0, $pn1, $vn+1] });  # b
+      push(@{$mn->{volumes}->[0]->{triangles}},{ v => [$vn+2, $vn+1, $pn2] });  # c
+      push(@{$mn->{volumes}->[0]->{triangles}},{ v => [$vn+0, $vn+1, $vn+2] }); # d
+
+      $vn += 3;
+   }
+   print "($vn vertices)\n";
+   return $mn;
+}
+
+sub midpoint {
+   my($p0,$p1) = @_;
+   my($pm);
+   for(my $i=0; $i<3; $i++) {
+      $pm->[$i] = ($p0->[$i] + $p1->[$i]) / 2;
+   }
+   return $pm;
+}
+   
+sub writeSTLA {
+   my($fn,$m) = @_;
+   open(my $fh,">",$fn);
+   print $fh "solid model\n";
+   foreach my $v (@{$m->{volumes}}) {
+      foreach my $f (@{$v->{triangles}}) {
+         print $fh " facet normal 0 0 1\n";
+         print $fh " outer loop\n";
+         foreach my $v (@{$f->{v}}) {
+            print $fh "  vertex ".join(" ",@{$m->{vertices}->[$v]->{c}})."\n";
+         }
+         print $fh " endloop\n";
+         print $fh " endfacet\n";
+      }
+   }
+   print $fh "endsolid model\n";
+}
+
+sub writeSTLB {
+   my($fn,$m) = @_;
+   # UINT8[80]  Header
+   # UINT32  Number of triangles
+   # 
+   # foreach triangle
+   # REAL32[3]  Normal vector
+   # REAL32[3]  Vertex 1
+   # REAL32[3]  Vertex 2
+   # REAL32[3]  Vertex 3
+   # UINT16  Attribute byte count
+   # end
+   open(my $fh,">",$fn);
+   print $fh " "x80;
+   my $ft = 0;
+   foreach my $v (@{$m->{volumes}}) {
+      $ft += scalar @{$v->{triangles}};
+   }
+   print $fh pack("L",$ft);
+   foreach my $v (@{$m->{volumes}}) {
+      foreach my $f (@{$v->{triangles}}) {
+         print $fh pack("f3",0,0,1);
+         print $fh pack("f3",@{$m->{vertices}->[$f->{v}->[0]]->{c}});
+         print $fh pack("f3",@{$m->{vertices}->[$f->{v}->[1]]->{c}});
+         print $fh pack("f3",@{$m->{vertices}->[$f->{v}->[2]]->{c}});
+         print $fh pack("S",0);
+      }
+   }
+   close $fh;
+}
+
+sub readSTL {
+   my($fn) = @_;
+   my $buff;
+   my $m;
+   my %c;                           # -- coordinate cache
+   
+   open(my $fh,"<",$fn);
+   read($fh,$buff,256);
+   seek($fh,0,0);    # -- rewind
+
+   if($buff=~/facet/) {
+      <$fh>;
+      my $f;
+      my @ci;
+      my $cn = 0;
+      while(<$fh>) {
+         $f = 1, next if(/\s*outer loop/);
+         if($f && /\s*endloop/) {
+            push(@{$m->{volumes}->[0]->{triangles}},{v=>[@ci]});
+            @ci = ();
+            $f = 0, next;
+         }
+         if($f && /\s*vertex\s+(\S.*)/) {
+            my(@v) = split(/\s+/,$1);
+            my $fp = join(" ",@v);
+            if(!defined $c{$fp}) {
+               push(@{$m->{vertices}},{c=>\@v});
+               $c{$fp} = $cn++;
+            }
+            push(@ci,$c{$fp});
+         }
+      }
+      #$info{file_type} = "ascii";
+   } else {
+      # -- binary stl
+      # UINT8[80]  Header
+      # UINT32  Number of triangles
+      # 
+      # foreach triangle
+      # REAL32[3]  Normal vector
+      # REAL32[3]  Vertex 1
+      # REAL32[3]  Vertex 2
+      # REAL32[3]  Vertex 3
+      # UINT16  Attribute byte count
+      # end
+      my $buff;
+
+      read($fh,$buff,80);
+      read($fh,$buff,4);
+      my $n = unpack("L",$buff);
+      my $cn = 0;
+      
+      for(my $i=0; $i<$n; $i++) { 
+         my(@ci);
+         my $fp;
+         
+         # -- normals
+         read($fh,$buff,3*4); my(@v) = unpack("f3",$buff);  
+
+         # -- v1
+         read($fh,$buff,3*4); my(@v) = unpack("f3",$buff);  
+         $fp = join(" ",@v);
+         if(!defined $c{$fp}) {
+            push(@{$m->{vertices}},{c=>\@v});
+            $c{$fp} = $cn++;
+         }
+         push(@ci,$c{$fp});
+
+         # -- v2
+         read($fh,$buff,3*4); my(@v) = unpack("f3",$buff);  
+         $fp = join(" ",@v);
+         if(!defined $c{$fp}) {
+            push(@{$m->{vertices}},{c=>\@v});
+            $c{$fp} = $cn++;
+         }
+         push(@ci,$c{$fp});
+
+         # -- v3
+         read($fh,$buff,3*4); my(@v) = unpack("f3",$buff);  
+         $fp = join(" ",@v);
+         if(!defined $c{$fp}) {
+            push(@{$m->{vertices}},{c=>\@v});
+            $c{$fp} = $cn++;
+         }
+         push(@ci,$c{$fp});
+         
+         push(@{$m->{volumes}->[0]->{triangles}},{v=>\@ci});
+         
+         read($fh,$buff,2);
+         my $an = unpack("S",$buff);
+      }
+      #$info{file_type} = "binary";
+   }
+   close $fh;
+   return $m;
+}
+
