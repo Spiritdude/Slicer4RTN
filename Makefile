@@ -3,7 +3,7 @@ VERSION = 0.3.2
 DEST = /usr/local/bin
 
 all::
-	@echo "make install deinstall test edit push pull change backup"
+	@echo "make install deinstall tests edit push pull change backup"
 
 install::
 	sudo apt -y install slic3r prusa-slicer
@@ -13,7 +13,7 @@ install::
 deinstall::
 	sudo rm -f ${DEST}/slicer4rtn
 
-test::
+tests::
 	cd tests; make
 
 # -- dev only
