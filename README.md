@@ -3,7 +3,7 @@
 RTN stands for [Rotating Tilted Nozzle](https://xyzdims.com/2021/01/27/3d-printing-rotating-tilted-nozzle-option/), a 4-axis 3D printer setup.
 
 Slicing4RTN is an Open Source implementation of a conic slicing procedure as mentioned by [ZHAW](https://zhaw.ch) as part of their [RotBot](https://www.zhaw.ch/en/medien/medienmitteilungen/detail-news-releases/event-news/upgrade-fuer-den-3d-drucker-spart-zeit-und-stuetzmaterial/) in 2021/01.
-This software is highly experimental and has been independently developed, yet is comparable to the slicing solution of ZHAW.
+This software is highly experimental and has been independently developed.
 
 [Conic Slicing for Rotating Tilted Nozzle (RTN) / 4 Axis](https://xyzdims.com/2021/02/26/3d-printing-conic-slicing-for-rotating-tilted-nozzle-rtn/) lays out more details of the slicing procedure and its application.
 
@@ -66,7 +66,7 @@ USAGE Slicer4RTN 0.3.2: [<opts>] <file.stl> ...
   - [ ] Cura Engine
   - [x] [Mandoline (Python)](https://github.com/revarbat/mandoline-py) (`mandoline`): creates bad G-code for now, struggles with pointy structures (after inverse conic mapping), not recommended
 - [ ] port to Python: larger developer pool than with Perl (must be fully compatible with its Perl version) and have more geometrical libraries available
-- [ ] recognize overhangs, segment sub-volumes and choose proper slicing methods and conic-center (that's a complex undertake)
+- [ ] recognize overhangs, segment sub-volumes and choose proper slicing methods and conic-centers (that's a complex undertake)
 
 ## 3-, 4- and 5-axis Printing
 - 3-axis: use `--angle=25` or so, and preview the G-code before you print, see [90 Overhangs without Support Structure with Non-Planar Slicing on 3-axis Printer](https://xyzdims.com/2021/03/03/3d-printing-90-overhangs-without-support-structure-with-non-planar-slicing-on-3-axis-printer/)

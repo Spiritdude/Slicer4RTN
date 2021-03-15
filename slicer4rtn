@@ -152,7 +152,13 @@ if($conf->{help} || @fs <= 0) {
    exit 0;
 }
 
+$SIG{INT} = sub {
+   cleanup();
+   exit -1;
+};
+
 my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
+my @rm_files;
 
 foreach my $fn (@fs) {
    my $t = time();
@@ -181,6 +187,7 @@ foreach my $fn (@fs) {
 
    print "$APPNAME:    #3/5 write temporary stl\n";
    writeSTLB("temp.stl",$m);
+   push(@rm_files,"temp.stl");
 
    print "$APPNAME:    #4/5 slice stl\n";
    if(fork()==0) {
@@ -202,13 +209,19 @@ foreach my $fn (@fs) {
    print "$APPNAME:    #5/5 remap gcode to '$fo'\n";
 
    mapGcode("temp.gcode",$fo,$m);
-
+   push(@rm_files,"temp.gcode");
+   
    unless($conf->{keep}) {
-      unlink "temp.stl";
-      unlink "temp.gcode";
+      cleanup();
    }
    $t = time()-$t;
    print "$APPNAME: ".sprintf("took %d sec%s total, done.\n",$t,$t>1?"s":"");
+}
+
+sub cleanup {
+   print "$APPNAME: abort, cleaning up temp-files\n";
+   unlink @rm_files;
+   @rm_files = ();
 }
 
 sub conicSpaceMapping {
