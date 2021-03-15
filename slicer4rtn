@@ -153,7 +153,7 @@ if($conf->{help} || @fs <= 0) {
 }
 
 $SIG{INT} = sub {
-   cleanup();
+   cleanup('abort');
    exit -1;
 };
 
@@ -219,7 +219,8 @@ foreach my $fn (@fs) {
 }
 
 sub cleanup {
-   print "$APPNAME: abort, cleaning up temp-files\n";
+   my($abort) = @_;
+   print "$APPNAME: abort, cleaning up temp-files\n" if($abort);
    unlink @rm_files;
    @rm_files = ();
 }
