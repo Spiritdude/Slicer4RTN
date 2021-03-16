@@ -75,8 +75,8 @@ while(<$fh>) {
    chop;
    next if(/^\s*#/);
    my($k,$v);
-   $k = $1, $v = $2, $k =~ s/-/_/g, $conf->{$k} = $v if(/\s*([\w\-]+)\s*=\s*(\S.*)\s*$/);
-   $k = $1, $k =~ s/-/_/g, $conf->{$k}++ if(/\s*([\w\-]+)\s*$/);
+   $k = $1, $v = $2, $k =~ s/-/_/g, $conf->{$k} = $v, next if(/^\s*([\w\-]+)\s*=\s*(\S.*)\s*$/);
+   $k = $1, $k =~ s/-/_/g, $conf->{$k}++, next if(/^\s*([\w\-]+)\s*$/);
 }
 close $fh;
 
@@ -116,7 +116,7 @@ if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
-      push(@slicer_args,"---load=${HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
+      push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
 } elsif($conf->{core_slicer} =~ /mandoline/) {
    push(@slicer_args,'-S','layer-height='.$conf->{layer_height}/cos($conf->{angle}));
