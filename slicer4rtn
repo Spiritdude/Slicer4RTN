@@ -34,7 +34,7 @@ use Math::Trig;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.3.2';
+my $VERSION = '0.3.3';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -98,7 +98,7 @@ if($conf->{version}) {
 # -- now we know core-slicer, add important settings
 if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--gcode-comments','--skirts=0', '--fill-pattern=rectilinear', 
-      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').$conf->{center},
+      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}),
       '--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
    push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
@@ -127,8 +127,8 @@ if($conf->{help} || @fs <= 0) {
       --rot-gcode=<v>      set G-code symbol for rotation (default: $conf->{rot_gcode})
       --rot-revolv=<mode>  set rotation revolution, 0 = unlimited, 1 = once (default: $conf->{rot_revolv})
       --rot-offset=<a>     set rotation offset (default: $conf->{rot_offset})
-      --tilt-gcode=<v>     set G-code symbol for tilt for 5-axis operation (default: $conf->{tilt_gcode})
       --rot-fixed=<angle>  set fixed rotation angle, usable if --axis=3 but 4-axis or 5-axis printer is target
+      --tilt-gcode=<v>     set G-code symbol for tilt for 5-axis operation (default: $conf->{tilt_gcode})
       --zoff=<v>           set z-offset, will be added to G1 ... Z<v>
       --erate=<f>          set extrusion rate (multiplier, default: $conf->{erate})
       --efmin=<v>          set extrusion factor minimum, (default: $conf->{efmin})
@@ -152,13 +152,7 @@ if($conf->{help} || @fs <= 0) {
    exit 0;
 }
 
-$SIG{INT} = sub {
-   cleanup('abort');
-   exit -1;
-};
-
 my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
-my @rm_files;
 
 foreach my $fn (@fs) {
    my $t = time();
@@ -187,7 +181,6 @@ foreach my $fn (@fs) {
 
    print "$APPNAME:    #3/5 write temporary stl\n";
    writeSTLB("temp.stl",$m);
-   push(@rm_files,"temp.stl");
 
    print "$APPNAME:    #4/5 slice stl\n";
    if(fork()==0) {
@@ -209,20 +202,13 @@ foreach my $fn (@fs) {
    print "$APPNAME:    #5/5 remap gcode to '$fo'\n";
 
    mapGcode("temp.gcode",$fo,$m);
-   push(@rm_files,"temp.gcode");
-   
+
    unless($conf->{keep}) {
-      cleanup();
+      unlink "temp.stl";
+      unlink "temp.gcode";
    }
    $t = time()-$t;
    print "$APPNAME: ".sprintf("took %d sec%s total, done.\n",$t,$t>1?"s":"");
-}
-
-sub cleanup {
-   my($abort) = @_;
-   print "$APPNAME: abort, cleaning up temp-files\n" if($abort);
-   unlink @rm_files;
-   @rm_files = ();
 }
 
 sub conicSpaceMapping {
@@ -274,7 +260,7 @@ sub mapVertices {
    my($m) = @_;
    foreach my $v (@{$m->{vertices}}) {
       #print "IN: $v->{c}->[0],$v->{c}->[1],$v->{c}->[2]\n";
-      my($x1,$y1,$z1) = conicSpaceMapping(0,0,$v->{c}->[0],$v->{c}->[1],$v->{c}->[2],$conf->{mode}eq'inside'?'direct':'inverse');
+      my($x1,$y1,$z1) = conicSpaceMapping($cx,$cy,$v->{c}->[0],$v->{c}->[1],$v->{c}->[2],$conf->{mode}eq'inside'?'direct':'inverse');
       $v->{c}->[0] = $x1;
       $v->{c}->[1] = $y1;
       $v->{c}->[2] = $z1;
@@ -432,6 +418,7 @@ sub mapGcode {
 
                $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
                $rot = $rabs if($conf->{rot_revolv}==0);
+               $rot = (($rot+180)%360)-180 if($conf->{rot_revolv}==1);
                $rot += $conf->{rot_offset};
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
 
@@ -490,6 +477,7 @@ sub mapGcode {
                
                $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
                $rot = $rabs if($conf->{rot_revolv}==0);
+               $rot = (($rot+180)%360)-180 if($conf->{rot_revolv}==1);
                $rot += $conf->{rot_offset};
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
                
