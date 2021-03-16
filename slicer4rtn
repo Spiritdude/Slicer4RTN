@@ -14,6 +14,8 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/03/16: 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
+# 2021/03/16: 0.3.4: rot_revolv=1 better $rot calculation (rot_revolv=0 untested)
 # 2021/03/12: 0.3.1: changing rot-offset 0 => 90
 # 2021/03/11: 0.3.0: version bump with various cleanups, more consistent settings, --inter-steps added
 # 2021/03/11: 0.2.6: diverse new settings: rot_gcode, rot_offset, rot_revolv, tilt_gcode and layer-height which is computed for core-slicer
@@ -31,10 +33,11 @@
 
 use strict;
 use Math::Trig;
+use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.3.3';
+my $VERSION = '0.4.0';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -59,13 +62,23 @@ my $conf = {
    recenter => 0,
    rot_gcode => 'A',
    rot_revolv => 1,
-   rot_offset => 90,
+   rot_offset => -90,
    tilt_gcode => 'B'
 };
 my @fs;
 
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
 my(@slicer_args);
+
+open(my $fh,"<","$ENV{HOME}/.config/$app/$app.ini");
+while(<$fh>) {
+   chop;
+   next if(/^\s*#/);
+   my($k,$v);
+   $k = $1, $v = $2, $k =~ s/-/_/g, $conf->{$k} = $v if(/\s*([\w\-]+)\s*=\s*(\S.*)\s*$/);
+   $k = $1, $k =~ s/-/_/g, $conf->{$k}++ if(/\s*([\w\-]+)\s*$/);
+}
+close $fh;
 
 foreach(@ARGV) {
    my($k,$v);
@@ -103,7 +116,7 @@ if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
-      push(@slicer_args,"---load=.config/slicer4rtn/$s.ini") if(-e ".config/slicer4rtn/$s.ini");
+      push(@slicer_args,"---load=${HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
 } elsif($conf->{core_slicer} =~ /mandoline/) {
    push(@slicer_args,'-S','layer-height='.$conf->{layer_height}/cos($conf->{angle}));
@@ -416,10 +429,9 @@ sub mapGcode {
                $z1 += $zoff;
                $z1 += $conf->{zoff};
 
-               $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
-               $rot = $rabs if($conf->{rot_revolv}==0);
-               $rot = (($rot+180)%360)-180 if($conf->{rot_revolv}==1);
-               $rot += $conf->{rot_offset};
+               $rabs -= fmod($rabs,360)-180-$rot;
+               $rot = $rabs+$conf->{rot_offset} if($conf->{rot_revolv}==0);
+               $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
 
                $z1 = sprintf("%.5f",$z1);
@@ -475,10 +487,9 @@ sub mapGcode {
                $z1 += $zoff;
                $z1 += $conf->{zoff};
                
-               $rabs -= ($rabs-$rot);           # -- FIXIT: continueous rotation not yet done
-               $rot = $rabs if($conf->{rot_revolv}==0);
-               $rot = (($rot+180)%360)-180 if($conf->{rot_revolv}==1);
-               $rot += $conf->{rot_offset};
+               $rabs -= fmod($rabs,360)-180-$rot;
+               $rot = $rabs+$conf->{rot_offset} if($conf->{rot_revolv}==0);
+               $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
                
                $z1 = sprintf("%.5f",$z1);
@@ -497,6 +508,7 @@ sub mapGcode {
          $z = $1;
          $lz = $z;
          $ln++;
+         $rabs = 0;                                    # -- reset absolute rotation angle
          #print $fho "M117 Layer #$ln\n";
          #print $fho ";LAYER:$ln\n";                    # -- make it look like Cura G-code
          
