@@ -389,20 +389,22 @@ sub mapGcode {
       
       print $fho "; $_\n" if(/^G[01] /);     # -- maintain original unlatered G-code (for now)
 
-      if(/^G[01] X([\-\d\.]+) Y([\-\d\.]+)(.*)$/) {      # -- moving X/Y in the vertical layer
-         my($x,$y,$r) = ($1,$2,$3);
+      if(/^G[01] (.*)X([\-\d\.]+) Y([\-\d\.]+)(.*)$/) {      # -- moving X/Y in the vertical layer
+         my($p,$x,$y,$r) = ($1,$2,$3,$4);
 
-         if(1 && $r =~ / Z([\-\d\.]+)/) {       # -- slic3r doesn't use X, Y and Z, only G1 Z.. for layer change
+         if(1 && / Z([\-\d\.]+)/) {       # -- slic3r doesn't use X, Y and Z, only G1 Z.. for layer change, but other slicers might like Cura or Simplify3D
             $z = $1;
+            $p =~ s/ Z[\-\d\.]+//;
             $r =~ s/ Z[\-\d\.]+//;
          }
-         if(1 && $r =~ / F([\-\d\.]+)/ && $1 > $conf->{max_speed} && $conf->{max_speed} && $r =~ / E[\-\d\.]+/) {    
+         if(1 && / F([\-\d\.]+)/ && $1 > $conf->{max_speed} && $conf->{max_speed} && / E[\-\d\.]+/) {    
+            $p =~ s/F[\-\d\.]+/F$conf->{max_speed}/;
             $r =~ s/F[\-\d\.]+/F$conf->{max_speed}/;
          }
          
          my($d) = sqrt(($x-$lx)*($x-$lx)+($y-$ly)*($y-$ly)+($z-$lz)*($z-$lz));
 
-         if($r =~ / E([\-\d\.]+)/) {         # -- extruding
+         if(/ E([\-\d\.]+)/ ) {         # -- extruding
             my $e = $1;
             my $steps = int($d*$conf->{inter_steps}+1);
 
@@ -410,9 +412,11 @@ sub mapGcode {
             $steps = 2 if($d<2);
 
             $r =~ s/ E[\-\d\.]+//;  # -- remove E.. from $r(est), we add it again with new value
+            $p =~ s/ E[\-\d\.]+//;  # -- remove E.. from $p(re), we add it again with new value
 
             for(my $n=1; $n<=$steps; $n++) {       # -- single G1 extrusion segment will be sub-segmented in $steps
                my $f = $n/$steps;      # -- fader 1.0/steps .. 1.0
+
                my($x0,$y0,$z0,$e0) = ((1-$f)*$lx + $f*$x, (1-$f)*$ly + $f*$y, (1-$f)*$lz + $f*$z, (1-$f)*$le + $f*$e);
 
                # -- marlin has problems with too long numbers behind '.', we cut it off
@@ -451,7 +455,7 @@ sub mapGcode {
                   print $fho "; do=$do, dc=$dc, ef=$ef ed=$ed\n" if($conf->{verbose});
                   $eabs = sprintf("%.5f",$eabs);
 
-                  print $fho "G1 X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion $f ($n of $steps)\n";
+                  print $fho "G1 ${p}X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion $f ($n of $steps)\n";
 
                   $lxc = $x1; $lyc = $y1; $lzc = $z1;
 
@@ -461,6 +465,7 @@ sub mapGcode {
                   $e0 *= $conf->{erate};
                   print $fho "G1 X$x1 Y$y1 Z$z1 E$e0 A$rot $xtr$r; extrusion $f ($n of $steps)\n";
                }
+               $p =~ s/F[\-\d\.]+//;      # -- for next segments do not need feed rate (speed) anymore
                $r =~ s/F[\-\d\.]+//;      # -- for next segments do not need feed rate (speed) anymore
             }
 
@@ -494,8 +499,11 @@ sub mapGcode {
                
                $z1 = sprintf("%.5f",$z1);
                $z1 = $conf->{motion_minz} if($z1 < $conf->{motion_minz});
-               print $fho "G1 X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion $f ($n of $steps)\n";
+
+               print $fho "G1 ${p}X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion $f ($n of $steps)\n";
+
                $lxc = $x1; $lyc = $y1; $lzc = $z1;
+               $p =~ s/F[\-\d\.]+//;            # -- for next segments do not need feed rate (speed) anymore
                $r =~ s/F[\-\d\.]+//;            # -- for next segments do not need feed rate (speed) anymore
             }
             $first_move_done++ unless($first_move_done);
@@ -504,15 +512,15 @@ sub mapGcode {
             $ly = $y;
             $lz = $z;
          }
-      } elsif(/^G1 / && /Z([\-\d\.]+)(.*)/) {          # -- just layer change: update z only
+      } elsif(/^G1 / && / Z([\-\d\.]+)(.*)/) {        # -- just layer change (without X/Y being mentioned): update z only
          $z = $1;
          $lz = $z;
          $ln++;
-         $rabs = 0;                                    # -- reset absolute rotation angle
+         $rabs = 0;                                   # -- reset absolute rotation angle
          #print $fho "M117 Layer #$ln\n";
-         #print $fho ";LAYER:$ln\n";                    # -- make it look like Cura G-code
+         #print $fho ";LAYER:$ln\n";                  # -- make it look like Cura G-code
          
-      } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.+)/) {      # -- slic3r: retract absolute
+      } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.+)/) {     # -- slic3r: retract absolute (without X/Y being mentioned)
          my($p,$r) = ($1,$3);
          my $e = $2;
          my $e0 = $e*$conf->{erate};               
@@ -526,7 +534,7 @@ sub mapGcode {
          $le = 0;
          $eabs = 0;
 
-      } elsif(/^G28 / && $ln > 100) {                  # -- end of print?
+      } elsif(/^G28 / && $ln > 100) {                  # -- hackish attempt to find end of print
          $zcmax += 0.5;
          # -- end of print MAY NOT at the highest point, and G28 X might crash into the existing piece
          #    therefore we move nozzle up Z of maximum of print plus 0.5mm more and that is a safe place now
