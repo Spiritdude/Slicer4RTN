@@ -37,7 +37,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.0';
+my $VERSION = '0.4.1';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -65,7 +65,6 @@ my $conf = {
    rot_offset => -90,
    tilt_gcode => 'B'
 };
-my @fs;
 
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
 my(@slicer_args);
@@ -80,14 +79,16 @@ while(<$fh>) {
 }
 close $fh;
 
-foreach(@ARGV) {
-   my($k,$v);
-   $k = $2, $v = $3, push(@slicer_args,"--$k=$v"), next if(/^--(slicer|slic3r|cura)\.([\w\-]+)=(.*)/);
+my @fs;
+
+foreach(@ARGV) {        # -- preprocess all command-line arguments
+   my($s,$k,$v);
+   $s = $1, $k = $2, $v = $3, push(@slicer_args,$s eq 'mandoline' ? ("-S","$k=$v") : "--$k=$v"), next if(/^--(slicer|slic3r|cura|mandoline)\.([\w\-]+)=(.*)/);
    if(/^--([\w\-]+)=(.*)/) {
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
-      if(!defined $conf->{$k_} && $k ne 'output') {
-         push(@slicer_args,"--$k=$v") 
+      if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {
+         push(@slicer_args,$conf->{core_slicer} eq 'mandoline' ? ("-S","$k=$v"):"--$k=$v");
       } else {
          $conf->{$k_} = $v;
       }
@@ -111,15 +112,15 @@ if($conf->{version}) {
 # -- now we know core-slicer, add important settings
 if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--gcode-comments','--skirts=0', '--fill-pattern=rectilinear', 
-      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}),
-      '--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
+      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
+      #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
    push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
       push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
 } elsif($conf->{core_slicer} =~ /mandoline/) {
-   push(@slicer_args,'-S','layer-height='.$conf->{layer_height}/cos($conf->{angle}));
+   push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
 }
 
@@ -167,43 +168,46 @@ if($conf->{help} || @fs <= 0) {
 
 my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
 
+print "== $APPNAME $VERSION https://github.com/Spiritdude/$APPNAME ==\n";
+
 foreach my $fn (@fs) {
    my $t = time();
 
    unless(-e $fn) {
-      print STDERR "$APPNAME ERROR: file not accessible '$fn'\n";
+      print STDERR "$app ERROR: file not accessible '$fn'\n";
       exit -1;
    }
    
-   print "$APPNAME: processing '$fn'\n";
+   print "processing '$fn':\n";
 
-   print "$APPNAME:    #1/5 read stl\n";
+   print "   1/5 read stl\n";
    my $m = readSTL($fn);
 
    for(my $n=1; $n<=$conf->{subdivide}; $n++) {
-      print "$APPNAME:       #$n/$conf->{subdivide} subdivide ";
+      print "      $n/$conf->{subdivide} subdivide ";
       $m = subdivideModel($m);
       writeSTLB("temp-subdivided-premap.stl",$m) if($conf->{keep});
    }
-   print "$APPNAME:    #2/5 map vertices\n";
-
    measureModel($m);
    recenterModel($m) if($conf->{recenter});
    
+   print "   2/5 map vertices\n";
    mapVertices($m);
 
-   print "$APPNAME:    #3/5 write temporary stl\n";
-   writeSTLB("temp.stl",$m);
+   my($tmp_gcode,$tmp_stl) = ("./temp-$$.gcode","./tmp-$$.stl");
 
-   print "$APPNAME:    #4/5 slice stl\n";
+   print "   3/5 write temporary stl\n";
+   writeSTLB($tmp_stl,$m);
+
+   print "   4/5 slice ($conf->{core_slicer}) stl\n";
+   print "$app INF: $conf->{core_slicer} @slicer_args -o $tmp_gcode $tmp_stl\n" if($conf->{verbose});
    if(fork()==0) {
-      print "$APPNAME INF: $conf->{core_slicer} @slicer_args -o temp.gcode temp.stl\n" if($conf->{verbose});
-      exec($conf->{core_slicer},@slicer_args,"-o","temp.gcode","temp.stl");
+      exec($conf->{core_slicer},@slicer_args,"-o",$tmp_gcode,$tmp_stl);
       exit 0;
    }
    wait;
-   if(!-e "temp.gcode") {
-      print "$APPNAME ERROR: slicer did not generate any gcode, abort\n";
+   if(!-e "$tmp_gcode") {
+      print "$app ERROR: slicer did not generate any gcode, abort\n";
       exit -1;
    }
    my $fo = $fn;
@@ -212,16 +216,19 @@ foreach my $fn (@fs) {
    $fo .= ".gcode" unless($fo=~/\.gcode$/i);
    
    $fo = $conf->{output} if($conf->{output});
-   print "$APPNAME:    #5/5 remap gcode to '$fo'\n";
+   print "   5/5 remap gcode to '$fo'";
 
-   mapGcode("temp.gcode",$fo,$m);
-
-   unless($conf->{keep}) {
-      unlink "temp.stl";
-      unlink "temp.gcode";
+   my $ln = mapGcode($tmp_gcode,$fo,$m);
+   print " ($ln lines)\n";
+   
+   if($conf->{keep}) {
+      print "$app: $tmp_stl and $tmp_gcode kept\n";
+   } else {
+      unlink $tmp_stl;
+      unlink $tmp_gcode;
    }
    $t = time()-$t;
-   print "$APPNAME: ".sprintf("took %d sec%s total, done.\n",$t,$t>1?"s":"");
+   print sprintf("== took %d sec%s total, done.\n",$t,$t>1?"s":"");
 }
 
 sub conicSpaceMapping {
@@ -231,12 +238,16 @@ sub conicSpaceMapping {
    my $d = sqrt($dx*$dx + $dy*$dy);
    my $rot = atan2($dy,$dx)/pi()*180;     # -180 .. 180
 
-   $d = -$y, $rot = 90 if($conf->{axis}==3);
+   if($conf->{axis}==3) {
+      #$d = -$y, $rot = 90;
+      $rot = $conf->{rot_fixed} + $conf->{rot_offset};
+      my $a = $rot/180*pi();
+      $d = cos($a)*$x + sin($a)*$y;
+   }
    $d *= tan($conf->{angle}/180*pi());
    
    $rot = $rot + 180 if($conf->{mode}eq'inside');
    
-   # -- marlin doesn't like too many decimals behind '.'
    $rot = sprintf("%.3f",$rot);
    
    return ($x,$y,sprintf("%.5f",$dir eq "direct" ? $z-$d : $z+$d),$rot);
@@ -261,6 +272,7 @@ sub measureModel {
 
 sub recenterModel {
    my($m) = @_;
+
    foreach my $v (@{$m->{vertices}}) {
       $v->{c}->[0] -= ($m->{max}->[0]+$m->{min}->[0])/2;
       $v->{c}->[1] -= ($m->{max}->[1]+$m->{min}->[1])/2;
@@ -287,17 +299,18 @@ sub mapGcode {
    my($lx,$ly,$lz,$le) = (0,0,0,0);
 
    my $mo = $conf->{mode}eq'inside'?'inverse':'direct';
-   my $zoff = 0;    
-   my $xtr = $conf->{axis}==5 || $conf->{rot_fixed} ? $conf->{tilt_gcode}.$conf->{angle}." " : "";
+ 
+   my $xtr = $conf->{axis}==5 || defined $conf->{rot_fixed} ? $conf->{tilt_gcode}.$conf->{angle}." " : "";
+ 
    my($xoff,$yoff) = split(/,/,$conf->{bed_center});
-   my $ln = 0;
+   my $zoff = 0;    
    
    my($lxc,$lyc,$lzc) = (0,0,0,0);    # -- last conic coordinates
    my $eabs = 0;        # -- this is the conic E
    my $ef = 1;          # -- this is the current E factor (changes)
    my $rabs = 0;        # -- rotation angle absolute (for rot_revolv=0 unlimited revolutions)
 
-   $rabs = 0;
+   my $tot_ln = 0;
    
    # == Slic3r & PrusaSlicer ==
    # Original STL: is not centered, but with defined conic center
@@ -320,10 +333,11 @@ sub mapGcode {
    #print to_json([$m->{size},$m->{min},$m->{max}],{canonical=>1,pretty=>1});
    
    if(1) {     # -- we determine the Z minimum of to be expected final G-code output
-      open(my $fh,"<",$fn) || die "$APPNAME: cannot read '$fn'\n";
+      open(my $fh,"<",$fn) || die "$app: cannot read '$fn'\n";
       my($c);
       my($zmin,$zmax) = (1e38,-1e38);
       while(<$fh>) {
+         $tot_ln++;
          next if(/^\s*;/);
          my $l = $_;
          if(/^G1 /) {
@@ -337,25 +351,25 @@ sub mapGcode {
                   my($x1,$y1,$z1) = conicSpaceMapping($cx,$cy,$c->{X}+$ixoff,$c->{Y}+$iyoff,$c->{Z},$mo);
                   if($zmin>$z1) {
                      $zmin = $z1;
-                     print "$APPNAME: zmin calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
+                     print "$app: zmin calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
                   }
                   if($zmax<$z1) {
                      $zmax = $z1;
-                     print "$APPNAME: zmax calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
+                     print "$app: zmax calc\n  $l  $c->{X},$c->{Y},$c->{Z} -> $x1,$y1,$z1\n" if($conf->{verbose}>1);
                   }
                }
             }
          }
       }
-      print "$APPNAME INF: zmin = $zmin\n" if($conf->{verbose});
-      print "$APPNAME INF: zmax = $zmax\n" if($conf->{verbose});
+      print "$app INF: zmin = $zmin\n" if($conf->{verbose});
+      print "$app INF: zmax = $zmax\n" if($conf->{verbose});
       $zoff = -$zmin;        # -- that will become the negative z-offset => move transformed piece back to z=0
       close $fh;
    }
 
-   open(my $fh,"<",$fn) || die "$APPNAME: ERROR: cannot read '$fn'\n";
-   open(my $fho,">",$fo) || die "$APPNAME: ERROR: cannot write '$fo'\n";
-   print $fho "; == $APPNAME $VERSION by XYZdims.com ==\n; Date: ".scalar localtime()."\n; Settings:\n";
+   open(my $fh,"<",$fn) || die "$app: ERROR: cannot read '$fn'\n";
+   open(my $fho,">",$fo) || die "$app: ERROR: cannot write '$fo'\n";
+   print $fho "; == $APPNAME $VERSION https://github.com/Spiritdude/Slicer4RTN ==\n; Date: ".scalar localtime()."\n; Settings:\n";
    foreach my $k (sort keys %$conf) {
       print $fho ";   $k = $conf->{$k}\n";
    }
@@ -369,7 +383,8 @@ sub mapGcode {
       print $fho "$g\n";
    }
 
-   my $ln = 0;
+   my $ln = 0;       # -- line number of Gcode
+   my $lyn = 0;      # -- layer number (0..n)
    my $zcmax = 0;
 
    my $efa = cos($conf->{angle}/180*pi())**2;         # -- this is the main extrusion correction ratio (multiplier)
@@ -419,7 +434,6 @@ sub mapGcode {
 
                my($x0,$y0,$z0,$e0) = ((1-$f)*$lx + $f*$x, (1-$f)*$ly + $f*$y, (1-$f)*$lz + $f*$z, (1-$f)*$le + $f*$e);
 
-               # -- marlin has problems with too long numbers behind '.', we cut it off
                $x0 = sprintf("%.5f",$x0);
                $y0 = sprintf("%.5f",$y0);
                $e0 = sprintf("%.5f",$e0);
@@ -434,7 +448,7 @@ sub mapGcode {
                $z1 += $conf->{zoff};
 
                $rabs -= fmod($rabs,360)-180-$rot;
-               $rot = $rabs+$conf->{rot_offset} if($conf->{rot_revolv}==0);
+               $rot = $rabs + $conf->{rot_offset} if($conf->{rot_revolv}==0);
                $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
 
@@ -515,10 +529,10 @@ sub mapGcode {
       } elsif(/^G1 / && / Z([\-\d\.]+)(.*)/) {        # -- just layer change (without X/Y being mentioned): update z only
          $z = $1;
          $lz = $z;
-         $ln++;
-         $rabs = 0;                                   # -- reset absolute rotation angle
-         #print $fho "M117 Layer #$ln\n";
-         #print $fho ";LAYER:$ln\n";                  # -- make it look like Cura G-code
+         $lyn++;
+         $rabs = fmod($rabs,360);                     
+         print $fho "M117 Layer #$lyn\n" if($conf->{display_layer_number});
+         print $fho ";LAYER:$lyn\n";                  # -- make it look like Cura G-code (for print3r and other backends)
          
       } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.+)/) {     # -- slic3r: retract absolute (without X/Y being mentioned)
          my($p,$r) = ($1,$3);
@@ -534,10 +548,10 @@ sub mapGcode {
          $le = 0;
          $eabs = 0;
 
-      } elsif(/^G28 / && $ln > 100) {                  # -- hackish attempt to find end of print
-         $zcmax += 0.5;
+      } elsif(/^G28 / && $ln > 100) {                  # -- hackish attempt to find end of print before homing
+         $zcmax += 1;
          # -- end of print MAY NOT at the highest point, and G28 X might crash into the existing piece
-         #    therefore we move nozzle up Z of maximum of print plus 0.5mm more and that is a safe place now
+         #    therefore we move nozzle up Z of maximum of print plus 1mm and that is a safe place now
          print $fho "G1 Z$zcmax ; lift nozzle to max of Z of actual print\n"; 
          print $fho "$_\n";
          
@@ -556,6 +570,8 @@ sub mapGcode {
 
    close $fh;
    close $fo;
+
+   return $tot_ln;
 }
 
 sub subdivideModel {
