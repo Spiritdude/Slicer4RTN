@@ -14,6 +14,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/03/20: 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
 # 2021/03/16: 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
 # 2021/03/16: 0.3.4: rot_revolv=1 better $rot calculation (rot_revolv=0 untested)
 # 2021/03/12: 0.3.1: changing rot-offset 0 => 90
@@ -37,7 +38,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.1';
+my $VERSION = '0.4.3';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -88,7 +89,9 @@ foreach(@ARGV) {        # -- preprocess all command-line arguments
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
       if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {
-         push(@slicer_args,$conf->{slicer} eq 'mandoline' ? ("-S","$k=$v"):"--$k=$v");
+         push(@slicer_args,
+            $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
+            $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
       } else {
          $conf->{$k_} = $v;
       }
@@ -116,11 +119,39 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/); # -- slice G-code
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
+      push(@slicer_args,"---load=/usr/share/$app/$s.ini") if(-e "/usr/share/$app/$s.ini");
       push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
+
 } elsif($conf->{slicer} =~ /mandoline/) {
    push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
+   foreach my $p ("/usr/share/$app/$conf->{slicer}.ini","$ENV{HOME}/.config/$app/$conf->{slicer}.ini") {
+      my $c = parseConfig($p);
+      foreach my $k (keys %$c) {
+         push(@slicer_args,'-S',"$k=$c->{$k}");
+      }
+   }
+   
+} elsif($conf->{slicer} =~ /CuraEngine$/) {
+   push(@slicer_args,'-s','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
+   push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
+   foreach my $p ("/usr/share/$app/CuraEngine.ini","$ENV{HOME}/.config/$app/CuraEngine.ini") {
+      my $c = parseConfig($p);
+      foreach my $k (keys %$c) {
+         push(@slicer_args,'-s',"$k=$c->{$k}");
+      }
+   }
+
+} elsif($conf->{slicer} =~ /CuraEngineLegacy/) {
+   push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$conf->{layer_height}/cos($conf->{angle}/180*pi())*1000,
+      '-s','skirtLineCount=0','-s','downSkinCount=3','-s','upSkinCount=3','-s','filamentDiameter=1750');
+   foreach my $p ("/usr/share/$app/CuraEngineLegacy.ini","$ENV{HOME}/.config/$app/CuraEngineLegacy.ini") {
+      my $c = parseConfig($p);
+      foreach my $k (keys %$c) {
+         push(@slicer_args,'-s',"$k=$c->{$k}");
+      }
+   }
 }
 
 if($conf->{help} || @fs <= 0) {
@@ -167,7 +198,7 @@ if($conf->{help} || @fs <= 0) {
 
 my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
 
-print "== $APPNAME $VERSION https://github.com/Spiritdude/$APPNAME ==\n";
+print "== $APPNAME $VERSION == https://github.com/Spiritdude/$APPNAME\n";
 
 foreach my $fn (@fs) {
    my $t = time();
@@ -184,23 +215,29 @@ foreach my $fn (@fs) {
    for(my $n=1; $n<=$conf->{subdivide}; $n++) {
       print "      $n/$conf->{subdivide} subdivide ";
       $m = subdivideModel($m);
-      writeSTLB("temp-subdivided-premap.stl",$m) if($conf->{keep});
    }
    measureModel($m);
    recenterModel($m) if($conf->{recenter});
    
    print "   2/5 map vertices\n";
    mapVertices($m);
-
-   my($tmp_gcode,$tmp_stl) = ("./temp-$$.gcode","./tmp-$$.stl");
+   
+   measureModel($m), levelModel($m); # if($conf->{slicer}=~/Cura/);
+   
+   my($tmp_gcode,$tmp_stl) = ("./tmp-$$.gcode","./tmp-$$.stl");
    print "   3/5 write temporary stl\n";
    writeSTLB($tmp_stl,$m);
    push(@rm,$tmp_stl);
 
    print "   4/5 slice ($conf->{slicer}) stl\n";
-   print "$app INF: $conf->{slicer} @slicer_args -o $tmp_gcode $tmp_stl\n" if($conf->{verbose});
    if(fork()==0) {
-      exec($conf->{slicer},@slicer_args,"-o",$tmp_gcode,$tmp_stl);
+      my(@a) = ($conf->{slicer});
+      push(@a,$conf->{slicer} =~ /CuraEngine$/ ? 
+         ("slice","-j","/usr/share/$app/fdmprinter.def.json","-s","machine_center_is_zero=true","-s","extruder_nr=0",@slicer_args,"-o",$tmp_gcode,"-l",$tmp_stl) :
+         (@slicer_args,"-o",$tmp_gcode,$tmp_stl) );
+      print "$app INF: @a\n" if($conf->{verbose});
+      close STDERR, close STDOUT if($conf->{slicer} =~ /CuraEngine$/ && $conf->{verbose}==0);      # -- is important, as CuraEngine is chatty and closing only STDERR will pollute the resulting G-code with error messages(!!)
+      exec(@a);
       exit 0;
    }
    wait;
@@ -273,11 +310,18 @@ sub measureModel {
 
 sub recenterModel {
    my($m) = @_;
-
    foreach my $v (@{$m->{vertices}}) {
       $v->{c}->[0] -= ($m->{max}->[0]+$m->{min}->[0])/2;
       $v->{c}->[1] -= ($m->{max}->[1]+$m->{min}->[1])/2;
       #print "OUT: $v->{c}->[0],$v->{c}->[1],$v->{c}->[2]\n";
+   }
+   measureModel($m);
+}
+
+sub levelModel {
+   my($m) = @_;
+   foreach my $v (@{$m->{vertices}}) {
+      $v->{c}->[2] += $m->{min}->[2];
    }
    measureModel($m);
 }
@@ -328,8 +372,10 @@ sub mapGcode {
    #                   off = tot - min - tot/2
    
    my($ixoff,$iyoff) = (0,0);
-   $ixoff = $m->{size}[0] - abs($m->{min}[0]) - $m->{size}[0] / 2;
-   $iyoff = $m->{size}[1] - abs($m->{min}[1]) - $m->{size}[1] / 2;
+   if($conf->{slicer}=~/(slic3r|prusa)/) {
+      $ixoff = $m->{size}[0] - abs($m->{min}[0]) - $m->{size}[0] / 2;
+      $iyoff = $m->{size}[1] - abs($m->{min}[1]) - $m->{size}[1] / 2;
+   }
    #print "==> $ixoff, $iyoff\n";
    #print to_json([$m->{size},$m->{min},$m->{max}],{canonical=>1,pretty=>1});
    
@@ -341,13 +387,13 @@ sub mapGcode {
          $tot_ln++;
          next if(/^\s*;/);
          my $l = $_;
-         if(/^G1 /) {
+         if($l =~ /^G[01] /) {
             my $s;
-            while(s/ ([XYZ])([\-\d\.]+)//) {
+            while($l =~ s/ ([XYZ])([\-\d\.]+)//) {
                $c->{$1} = $2;
                $s++;
             }
-            if($s && / E([\d\.]+)/) {     # -- only consider actual positive extrusion coordinates
+            if($s && $l =~ / E([\d\.]+)/) {     # -- only consider actual positive extrusion coordinates
                if(defined $c->{X} && defined $c->{Y} && defined $c->{Z}) {
                   my($x1,$y1,$z1) = conicSpaceMapping($cx,$cy,$c->{X}+$ixoff,$c->{Y}+$iyoff,$c->{Z},$mo);
                   if($zmin>$z1) {
@@ -370,7 +416,7 @@ sub mapGcode {
 
    open(my $fh,"<",$fn) || die "$app: ERROR: cannot read '$fn'\n";
    open(my $fho,">",$fo) || die "$app: ERROR: cannot write '$fo'\n";
-   print $fho "; == $APPNAME $VERSION https://github.com/Spiritdude/Slicer4RTN ==\n; Date: ".scalar localtime()."\n; Settings:\n";
+   print $fho "; == $APPNAME $VERSION == https://github.com/Spiritdude/Slicer4RTN\n; Date: ".scalar localtime()."\n; Settings:\n";
    foreach my $k (sort keys %$conf) {
       print $fho ";   $k = $conf->{$k}\n";
    }
@@ -535,7 +581,7 @@ sub mapGcode {
          print $fho "M117 Layer #$lyn\n" if($conf->{display_layer_number});
          print $fho ";LAYER:$lyn\n";                  # -- make it look like Cura G-code (for print3r and other backends)
          
-      } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.+)/) {     # -- slic3r: retract absolute (without X/Y being mentioned)
+      } elsif(/^G1 / && /(.+)E([\-\d\.]+)(.*)/) {     # -- (un)retract absolute (without X/Y being mentioned)
          my($p,$r) = ($1,$3);
          my $e = $2;
          my $e0 = $e*$conf->{erate};               
@@ -544,7 +590,7 @@ sub mapGcode {
          print $fho "${p}E$eabs$r; direct.c ($ed)\n";
          $le = $e;
 
-      } elsif(/^G92 E0 /) {                            # -- reset extruding count
+      } elsif(/^G92 / && /E0/) {                      # -- reset extruding count
          print $fho "$_\n";
          $le = 0;
          $eabs = 0;
@@ -626,6 +672,25 @@ sub midpoint {
       $pm->[$i] = ($p0->[$i] + $p1->[$i]) / 2;
    }
    return $pm;
+}
+
+sub parseConfig {
+   my($fn) = @_;
+   my $c = {};
+
+   return unless(-e $fn);
+
+   print "$app: reading $fn\n" if($conf->{verbose});
+
+   open(my $fh,"<",$fn);
+   my($k,$v);
+   while(<$fh>) {
+      chop;
+      next if(/^\s*#/);
+      $k = $1, $v = $2, $c->{$k} = $v if(/(\w+)\s*=\s*(.*)/);
+   }
+   close $fh;
+   return $c;
 }
    
 sub writeSTLA {

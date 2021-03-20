@@ -6,7 +6,6 @@ stl::
 	openscad overhang-out.scad -o overhang-out.stl
 	openscad overhang-in.scad -o overhang-in.stl
 	openscad overhang-inout.scad -o overhang-inout.stl
-	openscad overhang3l4mm.scad -o overhang3l4mm.stl
 
 gcode::
 	../slicer4rtn --recenter --subdivide=5 cube.stl   
@@ -18,7 +17,18 @@ gcode::
 	../slicer4rtn --subdivide=4 overhang-out.stl
 	../slicer4rtn --subdivide=4 --mode=inside overhang-in.stl
 	#../slicer4rtn --subdivide=4 overhang-inout.stl  # -- not yet possible 
-	../slicer4rtn --subdivide=5 overhang3l4mm.stl
+
+slicers::
+	../slicer4rtn --recenter --subdivide=5 cube.stl --slicer=slic3r --output=cube-slic3r.gcode
+	../slicer4rtn --recenter --subdivide=7 cube.stl --slicer=prusa-slicer --output=cube-prusa-slicer.gcode
+	../slicer4rtn --recenter --subdivide=5 cube.stl --slicer=CuraEngine --output=cube-CuraEngine.gcode
+	../slicer4rtn --recenter --subdivide=5 cube.stl --slicer=CuraEngineLegacy --output=cube-CuraEngineLegacy.gcode
+	../slicer4rtn --recenter --subdivide=5 cube.stl --slicer=mandoline --output=cube-mandoline.gcode
+	../slicer4rtn --subdivide=5 overhang3l4mm.stl --slicer=slic3r --output=overhang3l4mm-slic3r.gcode
+	../slicer4rtn --subdivide=7 overhang3l4mm.stl --slicer=prusa-slicer --output=overhang3l4mm-prusa-slicer.gcode
+	../slicer4rtn --subdivide=5 overhang3l4mm.stl --slicer=CuraEngine --output=overhang3l4mm-CuraEngine.gcode
+	../slicer4rtn --subdivide=5 overhang3l4mm.stl --slicer=CuraEngineLegacy --output=overhang3l4mm-CuraEngineLegacy.gcode
+	../slicer4rtn --subdivide=5 overhang3l4mm.stl --slicer=mandoline --output=overhang3l4mm-mandoline.gcode
 
 png::
 	gcode2png --color=1,1,0 --complete=50% cube.gcode
