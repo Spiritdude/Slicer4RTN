@@ -6,6 +6,7 @@ stl::
 	openscad overhang-out.scad -o overhang-out.stl
 	openscad overhang-in.scad -o overhang-in.stl
 	openscad overhang-inout.scad -o overhang-inout.stl
+	openscad overhang3l4mm.scad -o overhang3l4mm.stl
 
 gcode::
 	../slicer4rtn --recenter --subdivide=5 cube.stl   
@@ -17,6 +18,7 @@ gcode::
 	../slicer4rtn --subdivide=4 overhang-out.stl
 	../slicer4rtn --subdivide=4 --mode=inside overhang-in.stl
 	#../slicer4rtn --subdivide=4 overhang-inout.stl  # -- not yet possible 
+	../slicer4rtn --subdivide=5 overhang3l4mm.stl
 
 png::
 	gcode2png --color=1,1,0 --complete=50% cube.gcode

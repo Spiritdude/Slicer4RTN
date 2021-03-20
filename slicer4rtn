@@ -42,7 +42,7 @@ my $VERSION = '0.4.1';
 my($app) = ($0=~/\/([^\/]+)$/);
 
 my $conf = {
-   core_slicer => 'slic3r',
+   slicer => 'slic3r',
    mode => 'outside',
    axis => 4,
    angle => 45,
@@ -84,17 +84,17 @@ my @fs;
 foreach(@ARGV) {        # -- preprocess all command-line arguments
    my($s,$k,$v);
    $s = $1, $k = $2, $v = $3, push(@slicer_args,$s eq 'mandoline' ? ("-S","$k=$v") : "--$k=$v"), next if(/^--(slicer|slic3r|cura|mandoline)\.([\w\-]+)=(.*)/);
-   if(/^--([\w\-]+)=(.*)/) {
+   if(/^--([\w\-\.]+)=(.*)/) {
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
       if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {
-         push(@slicer_args,$conf->{core_slicer} eq 'mandoline' ? ("-S","$k=$v"):"--$k=$v");
+         push(@slicer_args,$conf->{slicer} eq 'mandoline' ? ("-S","$k=$v"):"--$k=$v");
       } else {
          $conf->{$k_} = $v;
       }
       next;
    }
-   $k = $1, $k =~ s/\-/_/g, $conf->{$k}++, next if(/^--([\w\-]+)/);
+   $k = $1, $k =~ s/\-/_/g, $conf->{$k}++, next if(/^--([\w\-\.]+)/);
    if(/^-(\w+)/) {
       foreach(split(/|/,$1)) {
          $conf->{defined $sf2l{$_} ? $sf2l{$_} : $_}++;
@@ -109,17 +109,16 @@ if($conf->{version}) {
    exit 0;
 }
 
-# -- now we know core-slicer, add important settings
-if($conf->{core_slicer} =~ /(slic3r|prusa)/) {
-   push(@slicer_args,'--gcode-comments','--skirts=0', '--fill-pattern=rectilinear', 
-      ($conf->{core_slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
+# -- now we know slicer, add sane & important settings
+if($conf->{slicer} =~ /(slic3r|prusa)/) {
+   push(@slicer_args,'--gcode-comments','--skirts=0', ($conf->{slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
       #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
-   push(@slicer_args,'-s') if($conf->{core_slicer}=~/prusa/);
+   push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/); # -- slice G-code
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
       push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
-} elsif($conf->{core_slicer} =~ /mandoline/) {
+} elsif($conf->{slicer} =~ /mandoline/) {
    push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
 }
@@ -130,6 +129,7 @@ if($conf->{help} || @fs <= 0) {
       -v or --verbose      increase verbosity
       --version            display version and exit
       -k or --keep         keep all temporary files (temp.stl, temp.gcode)
+      --recenter           recenter model X- & Y-wise
       --subdivide=<n>      set midpoint subdivisions (default: $conf->{subdivide})
       --mode=<mode>        set cone mode, either 'outside' or 'inside' (default: '$conf->{mode}')
       --output=<fname>     override default naming convention file.stl -> file.gcode
@@ -150,10 +150,9 @@ if($conf->{help} || @fs <= 0) {
       --inter-steps=<n>    set interpolation steps per mm (default: $conf->{inter_steps})
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: $conf->{motion_minz})
       --max-speed=<s>      set maximum speed (default: $conf->{max_speed})
-      --recenter           recenter model X- & Y-wise
-      --core-slicer=<slicer> set slicer (default: '$conf->{core_slicer}')
+      --slicer=<slicer>    set slicer (default: '$conf->{slicer}')
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
-      --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{core_slicer})
+      --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{slicer})
       
    examples:
       $app sphere.stl
@@ -172,14 +171,13 @@ print "== $APPNAME $VERSION https://github.com/Spiritdude/$APPNAME ==\n";
 
 foreach my $fn (@fs) {
    my $t = time();
-
+   my @rm;
+   
    unless(-e $fn) {
       print STDERR "$app ERROR: file not accessible '$fn'\n";
       exit -1;
    }
-   
    print "processing '$fn':\n";
-
    print "   1/5 read stl\n";
    my $m = readSTL($fn);
 
@@ -195,21 +193,24 @@ foreach my $fn (@fs) {
    mapVertices($m);
 
    my($tmp_gcode,$tmp_stl) = ("./temp-$$.gcode","./tmp-$$.stl");
-
    print "   3/5 write temporary stl\n";
    writeSTLB($tmp_stl,$m);
+   push(@rm,$tmp_stl);
 
-   print "   4/5 slice ($conf->{core_slicer}) stl\n";
-   print "$app INF: $conf->{core_slicer} @slicer_args -o $tmp_gcode $tmp_stl\n" if($conf->{verbose});
+   print "   4/5 slice ($conf->{slicer}) stl\n";
+   print "$app INF: $conf->{slicer} @slicer_args -o $tmp_gcode $tmp_stl\n" if($conf->{verbose});
    if(fork()==0) {
-      exec($conf->{core_slicer},@slicer_args,"-o",$tmp_gcode,$tmp_stl);
+      exec($conf->{slicer},@slicer_args,"-o",$tmp_gcode,$tmp_stl);
       exit 0;
    }
    wait;
    if(!-e "$tmp_gcode") {
-      print "$app ERROR: slicer did not generate any gcode, abort\n";
+      print "$app ERROR: slicer did not generate any gcode, abort.\n";
+      print "$app HINT: increase --subdivide=.. more and try again, or use --slicer=slic3r instead\n" if($conf->{slicer}=~/prusa/);
+      unlink @rm unless($conf->{keep});
       exit -1;
    }
+   push(@rm,$tmp_gcode);
    my $fo = $fn;
 
    $fo =~ s/\.(stl|amf|obj|off|3mf)$/.gcode/i;
@@ -217,6 +218,7 @@ foreach my $fn (@fs) {
    
    $fo = $conf->{output} if($conf->{output});
    print "   5/5 remap gcode to '$fo'";
+   print "\n" if($conf->{verbose});
 
    my $ln = mapGcode($tmp_gcode,$fo,$m);
    print " ($ln lines)\n";
@@ -224,8 +226,7 @@ foreach my $fn (@fs) {
    if($conf->{keep}) {
       print "$app: $tmp_stl and $tmp_gcode kept\n";
    } else {
-      unlink $tmp_stl;
-      unlink $tmp_gcode;
+      unlink @rm;
    }
    $t = time()-$t;
    print sprintf("== took %d sec%s total, done.\n",$t,$t>1?"s":"");
@@ -538,9 +539,9 @@ sub mapGcode {
          my($p,$r) = ($1,$3);
          my $e = $2;
          my $e0 = $e*$conf->{erate};               
-         my $ed = ($e - $le) * $efa * 1; $eabs += $ed;
+         my $ed = ($e - $le) * 1; $eabs += $ed;       # -- Note: $ed should be * $efa but we omit it as this is only happening when retract/unretract (slic3r)
          #print $fho "${p}E$e0$r; direct.c\n";
-         print $fho "${p}E$eabs$r; direct.c\n";
+         print $fho "${p}E$eabs$r; direct.c ($ed)\n";
          $le = $e;
 
       } elsif(/^G92 E0 /) {                            # -- reset extruding count
