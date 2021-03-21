@@ -86,29 +86,37 @@ foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {     # -- check sys
 my @fs;
 my @slicer_args_cli;
 
-foreach(@ARGV) {        # -- preprocess all command-line arguments
+foreach(@ARGV) {                            # -- preprocess all command-line arguments
    my($s,$k,$v);
-   $s = $1, $k = $2, $v = $3, push(@slicer_args_cli,$s eq 'mandoline' ? ("-S","$k=$v") : "--$k=$v"), next if(/^--(slicer|slic3r|cura|mandoline)\.([\w\-]+)=(.*)/);
+
+   if(/^--(slicer)\.([\w\-]+)=(.*)/) {      # -- slicer specific declared
+      $s = $1, $k = $2, $v = $3;
+      push(@slicer_args_cli,
+         $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
+         $conf->{slicer] =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v"
+      );
+      next;
+   }
    if(/^--([\w\-\.]+)=(.*)/) {
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
-      if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {
+      if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {      # -- slicer args
          push(@slicer_args_cli,
             $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
             $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
       } else {
-         $conf->{$k_} = $v;
+         $conf->{$k_} = $v;                                                   # -- general settings
       }
       next;
    }
-   $k = $1, $k =~ s/\-/_/g, $conf->{$k}++, next if(/^--([\w\-\.]+)/);
-   if(/^-(\w+)/) {
+   $k = $1, $k =~ s/\-/_/g, $conf->{$k}++, next if(/^--([\w\-\.]+)/);         # -- general switches
+   if(/^-(\w+)/) {                                                            # -- single character switch extended
       foreach(split(/|/,$1)) {
          $conf->{defined $sf2l{$_} ? $sf2l{$_} : $_}++;
       }
       next;
    }
-   push(@fs,$_);
+   push(@fs,$_);                                                              # -- must be a file to process
 }
 
 if($conf->{version}) {
@@ -187,7 +195,7 @@ if($conf->{help} || @fs <= 0) {
       --inter-steps=<n>    set interpolation steps per mm (default: $conf->{inter_steps})
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: $conf->{motion_minz})
       --max-speed=<s>      set maximum speed (default: $conf->{max_speed})
-      --slicer=<slicer>    set slicer (default: '$conf->{slicer}')
+      --slicer=<slicer>    set core slicer (default: '$conf->{slicer}')
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{slicer})
       
@@ -603,7 +611,7 @@ sub mapGcode {
          $le = 0;
          $eabs = 0;
 
-      } elsif(/^G28 / && $ln > 100) {                  # -- hackish attempt to find end of print before homing
+      } elsif(/^G28 / && $ln > 100) {                 # -- hackish attempt to find end of print before homing
          $zcmax += 1;
          # -- end of print MAY NOT at the highest point, and G28 X might crash into the existing piece
          #    therefore we move nozzle up Z of maximum of print plus 1mm and that is a safe place now

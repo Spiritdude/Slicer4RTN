@@ -35,7 +35,7 @@ and recommended install sane defaults in `/usr/share/slicer4rtn/`
 ```
 % make install-defaults
 ```
-but edit your personal settings per core slicer in `~/.config/slicer4rtn/` (those will not be overwritten in furture upgrades) 
+but edit your personal settings per core slicer in `~/.config/slicer4rtn/` (those will not be overwritten in future upgrades) 
 with the same filename as in `/usr/share/slicer4rtn/`
 
 ## Usage
@@ -67,7 +67,7 @@ USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
       --inter-steps=<n>    set interpolation steps per mm (default: 2)
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: 0.2)
       --max-speed=<s>      set maximum speed (default: 0)
-      --slicer=<slicer>    set slicer (default: 'slic3r')
+      --slicer=<slicer>    set core slicer (default: 'slic3r')
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer (slic3r)
       
