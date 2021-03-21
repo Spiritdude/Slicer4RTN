@@ -10,6 +10,13 @@ and [Slicer4RTN](https://xyzdims.com/3d-printing/slicer4rtn/) contains a more th
 
 **NOTE**: The software is in a very experimental state and defaults and settings might change during this early stage of development - please use caution when running the G-code on your 3D printer (don't do this unattended).
 
+## Limitations
+In its current state only slices in a single mode per model, either `outside`-cone printing or `inside`-cone printing (change with `--mode=..`)
+which means, only a single overhang reference is supported: conic slicing allows overhangs to be printed without support structure given they point away or to a central conic center;
+multiple centers are not yet supported which would require sub-volume segmenting and treat each sub-volume printed in its own mode.
+
+A future version of Slicer4RTN might segment volumes and support multiple conic centers and more complex overhang slicing - this is why this software is released as Open Source to help to push this development.
+
 ## Installation
 ```
 % make requirements
@@ -75,7 +82,7 @@ USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
   - [x] Cura Engine 4.x (`CuraEngine`): gives very good results, but is tedious to configure without GUI
   - [x] Cura Engine Legacy 15.10 (`CuraEngineLegacy`): gives good results as well
   - [x] [Mandoline (Python)](https://github.com/revarbat/mandoline-py) (`mandoline`): creates faulty G-code for now, struggles with pointy structures (after inverse conic mapping), not recommended
-- [ ] port to Python: larger developer pool than with Perl (must be fully compatible with its Perl version)
+- [ ] port to Python: larger developer pool than with Perl (must be fully compatible with its Perl version) in order to push development to multiple conic center support and sub-volume segmenting
 
 ## 3-, 4- and 5-axis Printing
 - 3-axis: use `--angle=25` or so, and preview the G-code before you print, see [90 Overhangs without Support Structure with Non-Planar Slicing on 3-axis Printer](https://xyzdims.com/2021/03/03/3d-printing-90-overhangs-without-support-structure-with-non-planar-slicing-on-3-axis-printer/)

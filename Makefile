@@ -29,7 +29,7 @@ clean::
 # -- dev only
 
 edit::
-	dee4 slicer4rtn Makefile README.md settings/*.ini tests/Makefile tests/*.scad
+	dee4 slicer4rtn Makefile README.md COPYRIGHT LICENSE settings/*.ini tests/Makefile tests/*.scad
 
 push::
 	git push
