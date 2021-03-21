@@ -93,7 +93,7 @@ foreach(@ARGV) {                            # -- preprocess all command-line arg
       $s = $1, $k = $2, $v = $3;
       push(@slicer_args_cli,
          $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
-         $conf->{slicer] =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v"
+         $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v"
       );
       next;
    }
