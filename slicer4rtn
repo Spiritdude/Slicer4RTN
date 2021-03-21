@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 # == Slicer 4 Rotating Tilted Nozzle (RTN) 4-Axis Setup ==
-#    written by Rene K. Mueller <contact@xyzdims.com>
+#    written by Rene K. Mueller <spiritdude@gmail.com>
 #
 # Copyright: (see COPYRIGHT file)
 # License: LGPLv3 (see LICENSE file)
@@ -10,7 +10,7 @@
 #   It provides simple conic slicer using ordinary slicer like Slic3r.
 #
 #   For technical details see at 
-#        https://xyzdims.com/2021/02/26/3d-printing-conic-slicing-for-rotating-tilted-nozzle-rtn/
+#        https://xyzdims.com/3d-printing/slicer4rtn
 #     and
 #        https://github.com/Spiritdude/Slicer4RTN
 #
