@@ -38,7 +38,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.3';
+my $VERSION = '0.4.4';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -70,26 +70,29 @@ my $conf = {
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
 my(@slicer_args);
 
-open(my $fh,"<","$ENV{HOME}/.config/$app/$app.ini");
-while(<$fh>) {
-   chop;
-   next if(/^\s*#/);
-   my($k,$v);
-   $k = $1, $v = $2, $k =~ s/-/_/g, $conf->{$k} = $v, next if(/^\s*([\w\-]+)\s*=\s*(\S.*)\s*$/);
-   $k = $1, $k =~ s/-/_/g, $conf->{$k}++, next if(/^\s*([\w\-]+)\s*$/);
+foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {     # -- check system-wide and user settings
+   open(my $fh,"<","$p/$app.ini");
+   while(<$fh>) {
+      chop;
+      next if(/^\s*#/);
+      my($k,$v);
+      $k = $1, $v = $2, $k =~ s/-/_/g, $conf->{$k} = $v, next if(/^\s*([\w\-]+)\s*=\s*(\S.*)\s*$/);
+      $k = $1, $k =~ s/-/_/g, $conf->{$k}++, next if(/^\s*([\w\-]+)\s*$/);
+   }
+   close $fh;
 }
-close $fh;
 
 my @fs;
+my @slicer_args_cli;
 
 foreach(@ARGV) {        # -- preprocess all command-line arguments
    my($s,$k,$v);
-   $s = $1, $k = $2, $v = $3, push(@slicer_args,$s eq 'mandoline' ? ("-S","$k=$v") : "--$k=$v"), next if(/^--(slicer|slic3r|cura|mandoline)\.([\w\-]+)=(.*)/);
+   $s = $1, $k = $2, $v = $3, push(@slicer_args_cli,$s eq 'mandoline' ? ("-S","$k=$v") : "--$k=$v"), next if(/^--(slicer|slic3r|cura|mandoline)\.([\w\-]+)=(.*)/);
    if(/^--([\w\-\.]+)=(.*)/) {
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
       if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {
-         push(@slicer_args,
+         push(@slicer_args_cli,
             $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
             $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
       } else {
@@ -112,18 +115,18 @@ if($conf->{version}) {
    exit 0;
 }
 
-# -- now we know slicer, add sane & important settings
+# -- now we know slicer, add sane & important settings, and convert CLI opts into slicer args
 if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--gcode-comments','--skirts=0', ($conf->{slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
       #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
-   push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/); # -- slice G-code
+   push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/);    # -- slice G-code
    push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
    foreach my $s (qw('slic3r','prusa-slicer')) {
       push(@slicer_args,"---load=/usr/share/$app/$s.ini") if(-e "/usr/share/$app/$s.ini");
       push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
 
-} elsif($conf->{slicer} =~ /mandoline/) {
+} elsif($conf->{slicer} =~ /mandoline$/) {
    push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
    foreach my $p ("/usr/share/$app/$conf->{slicer}.ini","$ENV{HOME}/.config/$app/$conf->{slicer}.ini") {
@@ -143,7 +146,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
       }
    }
 
-} elsif($conf->{slicer} =~ /CuraEngineLegacy/) {
+} elsif($conf->{slicer} =~ /CuraEngineLegacy$/) {
    push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$conf->{layer_height}/cos($conf->{angle}/180*pi())*1000,
       '-s','skirtLineCount=0','-s','downSkinCount=3','-s','upSkinCount=3','-s','filamentDiameter=1750');
    foreach my $p ("/usr/share/$app/CuraEngineLegacy.ini","$ENV{HOME}/.config/$app/CuraEngineLegacy.ini") {
@@ -153,6 +156,8 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
       }
    }
 }
+
+push(@slicer_args,@slicer_args_cli);      # -- append CLI args as well (at least to override earlier settings from config files)
 
 if($conf->{help} || @fs <= 0) {
    print "USAGE $APPNAME $VERSION: [<opts>] <file.stl> ...
@@ -236,13 +241,15 @@ foreach my $fn (@fs) {
          ("slice","-j","/usr/share/$app/fdmprinter.def.json","-s","machine_center_is_zero=true","-s","extruder_nr=0",@slicer_args,"-o",$tmp_gcode,"-l",$tmp_stl) :
          (@slicer_args,"-o",$tmp_gcode,$tmp_stl) );
       print "$app INF: @a\n" if($conf->{verbose});
-      close STDERR, close STDOUT if($conf->{slicer} =~ /CuraEngine$/ && $conf->{verbose}==0);      # -- is important, as CuraEngine is chatty and closing only STDERR will pollute the resulting G-code with error messages(!!)
+      # -- is important, as CuraEngine is chatty and closing only STDERR will pollute the resulting G-code with error messages(!!)
+      close STDERR, close STDOUT if($conf->{slicer} =~ /CuraEngine$/ && $conf->{verbose}==0);      
       exec(@a);
       exit 0;
    }
    wait;
    if(!-e "$tmp_gcode") {
       print "$app ERROR: slicer did not generate any gcode, abort.\n";
+      print "$app HINT: execute with -v to see the actual problem\n" unless($conf->{verbose});
       print "$app HINT: increase --subdivide=.. more and try again, or use --slicer=slic3r instead\n" if($conf->{slicer}=~/prusa/);
       unlink @rm unless($conf->{keep});
       exit -1;

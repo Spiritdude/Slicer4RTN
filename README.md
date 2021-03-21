@@ -18,6 +18,11 @@ if you want to install `slicer4rtn` system-wide:
 ```
 % make install
 ```
+and recommended install sane defaults in `/usr/share/slicer4rtn/`
+```
+% make install-defaults
+```
+but edit your personal settings per core slicer in `~/.config/slicer4rtn/` with the same filename as in `/usr/share/slicer4rtn/`.
 
 ## Usage
 ```
