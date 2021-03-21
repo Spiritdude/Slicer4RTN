@@ -17,6 +17,12 @@ multiple centers are not yet supported which would require sub-volume segmenting
 
 A future version of Slicer4RTN might segment volumes and support multiple conic centers and more complex overhang slicing - this is why this software is released as Open Source to help to push this development.
 
+## Download
+```
+% git clone https://github.com/Spiritdude/Slicer4RTN
+% cd Slicer4RTN/
+```
+
 ## Installation
 ```
 % make requirements
