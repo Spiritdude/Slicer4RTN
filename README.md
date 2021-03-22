@@ -8,7 +8,7 @@ This software has been independently developed yet is comparable to the solution
 [Conic Slicing for Rotating Tilted Nozzle (RTN) / 4 Axis](https://xyzdims.com/2021/02/26/3d-printing-conic-slicing-for-rotating-tilted-nozzle-rtn/) lays out more details of the slicing procedure and its application;
 and [Slicer4RTN](https://xyzdims.com/3d-printing/slicer4rtn/) contains a more thorough description of the features and details how to use `slicer4rtn`.
 
-**NOTE**: The software is in a very experimental state and defaults and settings might change during this early stage of development - please use caution when running the G-code on your 3-, 4- or 5-axis 3D printer, *don't do this unattended*.
+**NOTE**: The software is in a very experimental state and defaults and settings might change during this early stage of development - please use caution when running the G-code on your 3-, 4- or 5-axis 3D printer, **don't do this unattended**.
 
 ## Limitations
 In its current state only slices in a single "conic mode" per model, either `outside`-cone printing or `inside`-cone printing (change with `--mode=..`)
