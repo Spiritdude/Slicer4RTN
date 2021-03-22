@@ -124,22 +124,24 @@ if($conf->{version}) {
    exit 0;
 }
 
+my $lhc = $conf->{layer_height}/cos($conf->{angle}/180*pi());
+
 # -- now we know slicer, add sane & important settings, and convert CLI opts into slicer args
 if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--gcode-comments','--skirts=0', ($conf->{slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
       #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
    push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/);    # -- slice G-code
-   push(@slicer_args,'--layer-height='.$conf->{layer_height}/cos($conf->{angle}/180*pi()));
-   foreach my $s (qw('slic3r','prusa-slicer')) {
-      push(@slicer_args,"---load=/usr/share/$app/$s.ini") if(-e "/usr/share/$app/$s.ini");
-      push(@slicer_args,"---load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
+   push(@slicer_args,'--layer-height='.$lhc);
+   foreach my $s ($conf->{slicer}) {
+      push(@slicer_args,"--load=/usr/share/$app/$s.ini") if(-e "/usr/share/$app/$s.ini");
+      push(@slicer_args,"--load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
    }
 
 } elsif($conf->{slicer} =~ /mandoline$/) {
    push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
-   foreach my $p ("/usr/share/$app/$conf->{slicer}.ini","$ENV{HOME}/.config/$app/$conf->{slicer}.ini") {
-      my $c = parseConfig($p);
+   foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
+      my $c = parseConfig($p."/mandoline.ini");
       foreach my $k (keys %$c) {
          push(@slicer_args,'-S',"$k=$c->{$k}");
       }
@@ -148,18 +150,18 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
 } elsif($conf->{slicer} =~ /CuraEngine$/) {
    push(@slicer_args,'-s','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
    push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
-   foreach my $p ("/usr/share/$app/CuraEngine.ini","$ENV{HOME}/.config/$app/CuraEngine.ini") {
-      my $c = parseConfig($p);
+   foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
+      my $c = parseConfig($p."/CuraEngine.ini");
       foreach my $k (keys %$c) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
       }
    }
 
 } elsif($conf->{slicer} =~ /CuraEngineLegacy$/) {
-   push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$conf->{layer_height}/cos($conf->{angle}/180*pi())*1000,
+   push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$lhc*1000,
       '-s','skirtLineCount=0','-s','downSkinCount=3','-s','upSkinCount=3','-s','filamentDiameter=1750');
-   foreach my $p ("/usr/share/$app/CuraEngineLegacy.ini","$ENV{HOME}/.config/$app/CuraEngineLegacy.ini") {
-      my $c = parseConfig($p);
+   foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
+      my $c = parseConfig($p."/CuraEngineLegacy.ini");
       foreach my $k (keys %$c) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
       }

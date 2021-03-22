@@ -1,3 +1,6 @@
+SLICER=slic3r
+#SLICER=CuraEngine
+
 all::	stl gcode
 
 stl::
@@ -19,9 +22,9 @@ gcode::
 	#../slicer4rtn --subdivide=4 overhang-inout.stl  # -- not yet possible 
 
 gcode-settings::
-	../slicer4rtn --recenter --subdivide=5 cube.stl --output=cube-lh=0.1.gcode --layer-height=0.1
-	../slicer4rtn --recenter --subdivide=5 cube.stl --output=cube-lh=0.2.gcode --layer-height=0.2
-	../slicer4rtn --recenter --subdivide=5 cube.stl --output=cube-lh=0.3.gcode --layer-height=0.3
+	../slicer4rtn --slicer=${SLICER} --recenter --subdivide=5 cube.stl --output=cube-lh=0.1.gcode --layer-height=0.1
+	../slicer4rtn --slicer=${SLICER} --recenter --subdivide=5 cube.stl --output=cube-lh=0.2.gcode --layer-height=0.2
+	../slicer4rtn --slicer=${SLICER} --recenter --subdivide=5 cube.stl --output=cube-lh=0.3.gcode --layer-height=0.3
 
 slicers::
 	../slicer4rtn --recenter --subdivide=5 cube.stl --slicer=slic3r --output=cube-slic3r.gcode
