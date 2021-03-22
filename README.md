@@ -89,7 +89,7 @@ USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
 ## 3-, 4- and 5-axis Printing
 - 3-axis: use `--angle=25` or so, and preview the G-code before you print, see [90 Overhangs without Support Structure with Non-Planar Slicing on 3-axis Printer](https://xyzdims.com/2021/03/03/3d-printing-90-overhangs-without-support-structure-with-non-planar-slicing-on-3-axis-printer/)
 - 4-axis: not yet tested in physical, only as simulation
-  - RotBot: use `--rot-gcode=U` and `--rot-revolv=0` (untested)
+  - RotBot: use `--rot-gcode=U`, `--rot-revolv=0` and `--rot-offset=0` (untested)
 - 5-axis: not yet tested in physical, only as simulation
 
 See [Rotating Tilted Nozzle](https://xyzdims.com/2021/01/27/3d-printing-rotating-tilted-nozzle-option/) for more details.
