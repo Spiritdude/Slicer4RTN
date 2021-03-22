@@ -9,6 +9,7 @@ stl::
 	openscad overhang-out.scad -o overhang-out.stl
 	openscad overhang-in.scad -o overhang-in.stl
 	openscad overhang-inout.scad -o overhang-inout.stl
+	openscad overhang3l4mm.scad -o overhang3l4mm.stl
 
 gcode::
 	../slicer4rtn --recenter --subdivide=5 cube.stl   
