@@ -31,12 +31,8 @@ if you want to install `slicer4rtn` system-wide:
 ```
 % make install
 ```
-and recommended install sane defaults in `/usr/share/slicer4rtn/`
-```
-% make install-defaults
-```
-but edit your personal settings per core slicer in `~/.config/slicer4rtn/` (those will not be overwritten in future upgrades) 
-with the same filename as in `/usr/share/slicer4rtn/`
+which installs the app and sane defaults in `/usr/share/slicer4rtn/` but edit your personal settings per core slicer 
+in `~/.config/slicer4rtn/` as those will not be overwritten in future upgrades with the same filename as in `/usr/share/slicer4rtn/`.
 
 ## Usage
 ```
