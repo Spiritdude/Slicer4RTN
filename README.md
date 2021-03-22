@@ -11,7 +11,7 @@ and [Slicer4RTN](https://xyzdims.com/3d-printing/slicer4rtn/) contains a more th
 **NOTE**: The software is in a very experimental state and defaults and settings might change during this early stage of development - please use caution when running the G-code on your 3D printer (don't do this unattended).
 
 ## Limitations
-In its current state only slices in a single mode per model, either `outside`-cone printing or `inside`-cone printing (change with `--mode=..`)
+In its current state only slices in a single "conic mode" per model, either `outside`-cone printing or `inside`-cone printing (change with `--mode=..`)
 which means, only a single overhang reference is supported: conic slicing allows overhangs to be printed without support structure given they point away or to a central conic center;
 multiple centers are not yet supported which would require sub-volume segmenting and treat each sub-volume printed in its own mode.
 

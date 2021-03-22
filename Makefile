@@ -1,13 +1,17 @@
 APPNAME = Slicer4RTN
 VERSION = 0.4.5
 DEST = /usr/local/bin
-DEST_SETTINGS = /usr/share/
+DEST_SETTINGS = /usr/share
 
 all::
-	@echo "make install install-default install-user-defaults deinstall tests clean edit push pull change backup"
+	@echo "make requirements install install-default install-user-defaults deinstall tests clean edit push pull change backup"
 
-install::
+requirements::
 	sudo apt -y install slic3r prusa-slicer cura-engine
+
+install::	install-app install-defaults
+
+install-app::
 	sudo cp slicer4rtn ${DEST}/
 	mkdir -p ~/.config/slicer4rtn/ && touch ~/.config/slicer4rtn/slicer4rtn.ini && touch ~/.config/slicer4rtn/slic3r.ini
 
@@ -19,7 +23,7 @@ install-defaults::
 	cd settings/; tar cfv - . | (cd ${DEST_SETTINGS}/slicer4rtn/; sudo tar xf -)
 
 deinstall::
-	sudo rm -f ${DEST}/slicer4rtn /usr/share/slicer4rtn/
+	sudo rm -f ${DEST}/slicer4rtn ${DEST_SETTINGS}/slicer4rtn/
 
 tests::
 	cd tests; make
