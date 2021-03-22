@@ -2,7 +2,7 @@
 
 RTN stands for [Rotating Tilted Nozzle](https://xyzdims.com/2021/01/27/3d-printing-rotating-tilted-nozzle-option/), a 4-axis 3D printer.
 
-Slicing4RTN is an Open Source implementation of a conic slicing procedure as invented by [ZHAW](https://zhaw.ch) as part of their [RotBot](https://www.zhaw.ch/en/medien/medienmitteilungen/detail-news-releases/event-news/upgrade-fuer-den-3d-drucker-spart-zeit-und-stuetzmaterial/) announcement in 2021/01.
+Slicing4RTN is an Open Source implementation of a conic slicing procedure as invented by [ZHAW](https://zhaw.ch) (Elspass, Jaeger, Wuethrich, Gubser, Bos and Holdener) as part of their [RotBot](https://www.zhaw.ch/en/medien/medienmitteilungen/detail-news-releases/event-news/upgrade-fuer-den-3d-drucker-spart-zeit-und-stuetzmaterial/) announcement in 2021/01.
 This software has been independently developed yet is comparable to the solution of ZHAW.
 
 [Conic Slicing for Rotating Tilted Nozzle (RTN) / 4 Axis](https://xyzdims.com/2021/02/26/3d-printing-conic-slicing-for-rotating-tilted-nozzle-rtn/) lays out more details of the slicing procedure and its application;

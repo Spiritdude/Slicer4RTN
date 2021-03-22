@@ -1,6 +1,7 @@
 APPNAME = Slicer4RTN
-VERSION = 0.4.4
+VERSION = 0.4.5
 DEST = /usr/local/bin
+DEST_SETTINGS = /usr/share/
 
 all::
 	@echo "make install install-default install-user-defaults deinstall tests clean edit push pull change backup"
@@ -14,8 +15,8 @@ install-user-defaults::
 	cd settings/slicers/; tar cfv - . | (cd ~/.config/slicer4rtn/; tar xf -)
 
 install-defaults::
-	sudo mkdir -p /usr/share/slicer4rtn/
-	cd settings/; tar cfv - . | (cd /usr/share/slicer4rtn/; sudo tar xf -)
+	sudo mkdir -p ${DEST_SETTINGS}/slicer4rtn/
+	cd settings/; tar cfv - . | (cd ${DEST_SETTINGS}/slicer4rtn/; sudo tar xf -)
 
 deinstall::
 	sudo rm -f ${DEST}/slicer4rtn /usr/share/slicer4rtn/
@@ -32,7 +33,7 @@ edit::
 	dee4 slicer4rtn Makefile README.md COPYRIGHT LICENSE settings/*.ini tests/Makefile tests/*.scad
 
 push::
-	git push
+	git push -u origin master
 
 pull::
 	git pull
