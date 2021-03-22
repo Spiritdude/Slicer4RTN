@@ -19,7 +19,7 @@
 # 2021/03/20: 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
 # 2021/03/16: 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
 # 2021/03/16: 0.3.4: rot_revolv=1 better $rot calculation (rot_revolv=0 untested)
-# 2021/03/12: 0.3.1: changing rot-offset 0 => 90
+# 2021/03/12: 0.3.1: changing rot-offset 0 => -90
 # 2021/03/11: 0.3.0: version bump with various cleanups, more consistent settings, --inter-steps added
 # 2021/03/11: 0.2.6: diverse new settings: rot_gcode, rot_offset, rot_revolv, tilt_gcode and layer-height which is computed for core-slicer
 # 2021/03/10: 0.2.5: added main $efa multiplier depends on angle, not yet sure if it's correct

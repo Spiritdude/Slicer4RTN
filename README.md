@@ -20,6 +20,26 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 ## Supported Platforms
 - Linux Ubuntu/Debian, tested on Ubuntu 20.04 LTS
 
+## Updates:
+- 0.4.5: fixing config load for slic3r & prusa-slicer
+- 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
+- 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
+- 0.3.4: rot_revolv=1 better $rot calculation (rot_revolv=0 untested)
+- 0.3.1: changing rot-offset 0 => -90
+- 0.3.0: version bump with various cleanups, more consistent settings, --inter-steps added
+- 0.2.6: diverse new settings: rot_gcode, rot_offset, rot_revolv, tilt_gcode and layer-height which is computed for core-slicer
+- 0.2.5: added main $efa multiplier depends on angle, not yet sure if it's correct
+- 0.2.4: making arguments for core slicer easier, --slicer.<k>=<v> as well --<k>=<v> works (better for print3r integration)
+- 0.2.3: simplifying code, extrusion interpolation still off (needs reworking)
+- 0.2.0: changing extrusion calculation, better apprx., flow_rate => erate
+- 0.1.1: properly re-offset G-code output from slic3r and prusa-slicer as it centers model, early support for prusa-slicer
+- 0.1.0: new --slicer.key=val added, added --zoff=val to re-adjust zoffset in final G-code
+- 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change change of cone
+- 0.0.4: added --mode=outside or inside to reverse order for inside/outside-cone printing
+- 0.0.3: moving stl2rtn and gcodertn into slicer4rtn
+- 0.0.2: bug fixed, much better G-gcode output, viewable by Cura
+- 0.0.1: first functional version, various bugs
+
 ## Download
 ```
 % git clone https://github.com/Spiritdude/Slicer4RTN
