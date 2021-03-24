@@ -1,5 +1,6 @@
 SLICER=slic3r
 #SLICER=CuraEngine
+SLICER=cura-slicer
 
 all::	stl gcode
 

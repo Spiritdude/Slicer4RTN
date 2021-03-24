@@ -170,6 +170,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    }
 } elsif($conf->{slicer} =~ /cura-slicer$/) {
    push(@slicer_args,"-vv") if($conf->{verbose});
+   push(@slicer_args,'--layer_height='.$lhc);
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/cura-slicer.ini");
       foreach my $k (keys %$c) {

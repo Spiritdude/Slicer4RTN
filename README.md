@@ -105,6 +105,7 @@ USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
   - [x] Slic3r 1.2.x (`slic3r`): gives reliable results for now
   - [x] Prusa Slicer 2.x (`prusa-slicer`): it makes assumptions of printability, e.g. an inverse conic mapped cube creates "Empty layers detected, the output would not be printable", and fails to be sliced; not recommended
   - [x] Cura Engine 4.x (`CuraEngine`): gives very good results, but is tedious to configure without GUI
+    - [x] [Cura CLI Wrapper](https://github.com/Spiritdude/Cura-CLI-Wrapper) (`cura-slicer`): easier to use than CuraEngine
   - [x] Cura Engine Legacy 15.10 (`CuraEngineLegacy`): gives good results as well
   - [x] [Mandoline (Python)](https://github.com/revarbat/mandoline-py) (`mandoline`): creates faulty G-code for now, struggles with pointy structures after inverse conic mapping, not recommended yet (but might become the most relevant slicer in the future of `slicer4rtn`)
 - [ ] port to Python: larger developer pool than with Perl (must be fully compatible with its Perl version) in order to push development like
