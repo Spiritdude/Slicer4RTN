@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/03/23: 0.4.6: adding support for 'cura-slicer' (CuraEngine wrapper https://github.com/Spiritdude/Cura-CLI-Wrapper)
 # 2021/03/22: 0.4.5: fixing config load for slic3r & prusa-slicer
 # 2021/03/20: 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
 # 2021/03/16: 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
@@ -40,7 +41,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.5';
+my $VERSION = '0.4.6';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -139,7 +140,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    }
 
 } elsif($conf->{slicer} =~ /mandoline$/) {
-   push(@slicer_args,'-S','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
+   push(@slicer_args,'-S','layer_height='.$lhc);
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/mandoline.ini");
@@ -149,7 +150,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    }
    
 } elsif($conf->{slicer} =~ /CuraEngine$/) {
-   push(@slicer_args,'-s','layer_height='.$conf->{layer_height}/cos($conf->{angle}));
+   push(@slicer_args,'-s','layer_height='.$lhc);
    push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/CuraEngine.ini");
@@ -167,6 +168,15 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
       }
    }
+} elsif($conf->{slicer} =~ /cura-slicer$/) {
+   push(@slicer_args,"-vv") if($conf->{verbose});
+   foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
+      my $c = parseConfig($p."/cura-slicer.ini");
+      foreach my $k (keys %$c) {
+         push(@slicer_args,"--$k=$c->{$k}");
+      }
+   }
+   push(@slicer_args,'--layer_height='.$lhc,'--support-enable=0','--brim-line-count=0','--skirt-line-count=0','--machine_center_is_zero=true');
 }
 
 push(@slicer_args,@slicer_args_cli);      # -- append CLI args as well (at least to override earlier settings from config files)
@@ -198,7 +208,7 @@ if($conf->{help} || @fs <= 0) {
       --inter-steps=<n>    set interpolation steps per mm (default: $conf->{inter_steps})
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: $conf->{motion_minz})
       --max-speed=<s>      set maximum speed (default: $conf->{max_speed})
-      --slicer=<slicer>    set core slicer (default: '$conf->{slicer}')
+      --slicer=<slicer>    set core slicer slic3r, prusa-slicer, CuraEngine{Legacy}, cura-slicer, mandoline (default: '$conf->{slicer}')
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{slicer})
       
@@ -609,10 +619,10 @@ sub mapGcode {
          print $fho "${p}E$eabs$r; direct.c ($ed)\n";
          $le = $e;
 
-      } elsif(/^G92 / && /E0/) {                      # -- reset extruding count
+      } elsif(/^G92 / && /E([\d\.]*)/) {              # -- reset extruding count
          print $fho "$_\n";
-         $le = 0;
-         $eabs = 0;
+         $le = $1;
+         $eabs = $le;
 
       } elsif(/^G28 / && $ln > 100) {                 # -- hackish attempt to find end of print before homing
          $zcmax += 1;
