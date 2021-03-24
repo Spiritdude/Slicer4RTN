@@ -23,7 +23,7 @@ install-defaults::
 	cd settings/; tar cfv - . | (cd ${DEST_SETTINGS}/slicer4rtn/; sudo tar xf -)
 
 deinstall::
-	sudo rm -f ${DEST}/slicer4rtn ${DEST_SETTINGS}/slicer4rtn/
+	sudo rm -rf ${DEST}/slicer4rtn ${DEST_SETTINGS}/slicer4rtn/
 
 tests::
 	cd tests; make
