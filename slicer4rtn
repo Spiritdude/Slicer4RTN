@@ -228,6 +228,8 @@ my($cx,$cy) = split(/,/,$conf->{center}) if($conf->{center});
 
 print "== $APPNAME $VERSION == https://github.com/Spiritdude/$APPNAME\n";
 
+$| = 1;     # -- non-buffer stdout
+
 foreach my $fn (@fs) {
    my $t = time();
    my @rm;
