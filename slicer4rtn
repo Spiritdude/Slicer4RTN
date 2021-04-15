@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/04/15: 0.4.7: cleaner X Y Z output
 # 2021/03/23: 0.4.6: adding support for 'cura-slicer' (CuraEngine wrapper https://github.com/Spiritdude/Cura-CLI-Wrapper)
 # 2021/03/22: 0.4.5: fixing config load for slic3r & prusa-slicer
 # 2021/03/20: 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
@@ -41,7 +42,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.6';
+my $VERSION = '0.4.7';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -515,6 +516,7 @@ sub mapGcode {
 
                $x0 = sprintf("%.5f",$x0);
                $y0 = sprintf("%.5f",$y0);
+               $z0 = sprintf("%.5f",$z0);
                $e0 = sprintf("%.5f",$e0);
 
                $x0 += $ixoff; $y0 += $iyoff;    # -- realign G-code coords before remapping again
@@ -531,6 +533,8 @@ sub mapGcode {
                $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
 
+               $x1 = sprintf("%.5f",$x1);
+               $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
 
                if(1) {
@@ -590,6 +594,8 @@ sub mapGcode {
                $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
                $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
                
+               $x1 = sprintf("%.5f",$x1);
+               $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
                $z1 = $conf->{motion_minz} if($z1 < $conf->{motion_minz});
 

@@ -1,5 +1,5 @@
 APPNAME = Slicer4RTN
-VERSION = 0.4.6
+VERSION = 0.4.7
 DEST = /usr/local/bin
 DEST_SETTINGS = /usr/share
 
