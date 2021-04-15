@@ -536,6 +536,7 @@ sub mapGcode {
                $x1 = sprintf("%.5f",$x1);
                $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
+               $rot = sprintf("%.5f",$rot);
 
                if(1) {
                   # -- I'm aware $do does not need to be calculated here (can move outside of for() but I keep it here until interpolation calculation is finalized)
@@ -598,6 +599,8 @@ sub mapGcode {
                $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
                $z1 = $conf->{motion_minz} if($z1 < $conf->{motion_minz});
+   
+               $rot = sprintf("%.5f",$rot);
 
                print $fho "G1 ${p}X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion $f ($n of $steps)\n";
 
