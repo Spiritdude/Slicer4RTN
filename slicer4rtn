@@ -227,6 +227,8 @@ if($conf->{help} || @fs <= 0) {
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: $conf->{motion_minz})
       --max-speed=<s>      set maximum speed (default: $conf->{max_speed})
       --slicer=<slicer>    set core slicer slic3r, prusa-slicer, CuraEngine{Legacy}, cura-slicer, mandoline (default: '$conf->{slicer}')
+      --start-gcode=...    set start gcode (disables core slicer's start-gcode)
+      --end-gcode=...      set end gcode (disables core slicer's end-gcode)
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer ($conf->{slicer})
       

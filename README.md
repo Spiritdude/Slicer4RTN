@@ -21,6 +21,9 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 - Linux Ubuntu/Debian, tested on Ubuntu 20.04 LTS
 
 ## Updates
+- 0.4.8: support of start-gcode and end-gcode
+- 0.4.7: cleaner X Y Z output
+- 0.4.6: adding support for 'cura-slicer' (CuraEngine wrapper https://github.com/Spiritdude/Cura-CLI-Wrapper)
 - 0.4.5: fixing config load for slic3r & prusa-slicer
 - 0.4.2: CuraEngine 4.4.x & CuraEngineLegacy (15.10) experimental support added 
 - 0.4.0: supporting ~/.config/slicer4rtn/slicer4rtn.ini with new defaults
