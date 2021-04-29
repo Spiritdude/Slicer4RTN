@@ -34,7 +34,7 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 - 0.2.0: changing extrusion calculation, better apprx., flow_rate => erate
 - 0.1.1: properly re-offset G-code output from slic3r and prusa-slicer as it centers model, early support for prusa-slicer
 - 0.1.0: new --slicer.key=val added, added --zoff=val to re-adjust zoffset in final G-code
-- 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change change of cone
+- 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change angle of cone
 - 0.0.4: added --mode=outside or inside to reverse order for inside/outside-cone printing
 - 0.0.3: moving stl2rtn and gcodertn into slicer4rtn
 - 0.0.2: bug fixed, much better G-gcode output, viewable by Cura

@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/04/27: 0.4.8: support of start-gcode and end-gcode
 # 2021/04/15: 0.4.7: cleaner X Y Z output
 # 2021/03/23: 0.4.6: adding support for 'cura-slicer' (CuraEngine wrapper https://github.com/Spiritdude/Cura-CLI-Wrapper)
 # 2021/03/22: 0.4.5: fixing config load for slic3r & prusa-slicer
@@ -30,7 +31,7 @@
 # 2021/03/06: 0.2.0: changing extrusion calculation, better apprx., flow_rate => erate
 # 2021/03/04: 0.1.1: properly re-offset G-code output from slic3r and prusa-slicer as it centers model, early support for prusa-slicer
 # 2021/03/01: 0.1.0: new --slicer.key=val added, added --zoff=val to re-adjust zoffset in final G-code
-# 2021/02/28: 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change change of cone
+# 2021/02/28: 0.0.5: added --axis=3, 4 or 5 to create for 3-, 4- or 5-axis G-code 3d-printer, added --angle=45 to change angle of cone
 # 2021/02/26: 0.0.4: added --mode=outside or inside to reverse order for inside/outside-cone printing
 # 2021/02/25: 0.0.3: moving stl2rtn and gcodertn into slicer4rtn
 # 2021/02/24: 0.0.2: bug fixed, much better G-gcode output, viewable by Cura
@@ -42,7 +43,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.7';
+my $VERSION = '0.4.8';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -69,6 +70,13 @@ my $conf = {
    rot_revolv => 1,
    rot_offset => -90,
    tilt_gcode => 'B'
+};
+
+my $confUnset = {
+   output => 1,
+   rot_fixed => 1,
+   start_gcode => 1,
+   end_gcode => 1 
 };
 
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
@@ -103,7 +111,7 @@ foreach(@ARGV) {                            # -- preprocess all command-line arg
    if(/^--([\w\-\.]+)=(.*)/) {
       $k = $1, $v = $2;
       my $k_ = $k; $k_ =~ s/\-/_/g;
-      if(!defined $conf->{$k_} && $k ne 'output' && $k ne 'rot-fixed') {      # -- slicer args
+      if(!defined $conf->{$k_} && !defined $confUnset->{$k_}) {               # -- slicer args
          push(@slicer_args_cli,
             $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
             $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
@@ -135,6 +143,8 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
       #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
    push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/);    # -- slice G-code
    push(@slicer_args,'--layer-height='.$lhc);
+   push(@slicer_args,'--start-gcode=;') if(defined $conf->{start_gcode});
+   push(@slicer_args,'--end-gcode=;') if(defined $conf->{end_gcode});
    foreach my $s ($conf->{slicer}) {
       push(@slicer_args,"--load=/usr/share/$app/$s.ini") if(-e "/usr/share/$app/$s.ini");
       push(@slicer_args,"--load=$ENV{HOME}/.config/$app/$s.ini") if(-e "$ENV{HOME}/.config/$app/$s.ini");
@@ -143,6 +153,8 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
 } elsif($conf->{slicer} =~ /mandoline$/) {
    push(@slicer_args,'-S','layer_height='.$lhc);
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
+   push(@slicer_args,'--start-gcode=;') if(defined $conf->{start_gcode});
+   push(@slicer_args,'--end-gcode=;') if(defined $conf->{end_gcode});
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/mandoline.ini");
       foreach my $k (keys %$c) {
@@ -153,6 +165,8 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
 } elsif($conf->{slicer} =~ /CuraEngine$/) {
    push(@slicer_args,'-s','layer_height='.$lhc);
    push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
+   push(@slicer_args,'-s','machine_start_gcode=;') if(defined $conf->{start_gcode});
+   push(@slicer_args,'-s','machine_end_gcode=;') if(defined $conf->{end_gcode});
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/CuraEngine.ini");
       foreach my $k (keys %$c) {
@@ -172,6 +186,8 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
 } elsif($conf->{slicer} =~ /cura-slicer$/) {
    push(@slicer_args,"-vv") if($conf->{verbose});
    push(@slicer_args,'--layer_height='.$lhc);
+   push(@slicer_args,'--machine_start_gcode=;') if(defined $conf->{start_gcode});
+   push(@slicer_args,'--machine_end_gcode=;') if(defined $conf->{end_gcode});
    foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {
       my $c = parseConfig($p."/cura-slicer.ini");
       foreach my $k (keys %$c) {
@@ -321,7 +337,7 @@ sub conicSpaceMapping {
    
    $rot = sprintf("%.3f",$rot);
    
-   return ($x,$y,sprintf("%.5f",$dir eq "direct" ? $z-$d : $z+$d),$rot);
+   return ($x,$y,$dir eq "direct" ? $z-$d : $z+$d,$rot);
 }
 
 sub measureModel {
@@ -460,7 +476,7 @@ sub mapGcode {
       print $fho "; slicer4rtn start-gcode:\n";
       my $g = "$conf->{start_gcode}\n";
       $g =~ s/\\n/\n/g;
-      print $fho "$g\n";
+      print $fho "$g; /slicer4rtn start-gcode\n";
    }
 
    my $ln = 0;       # -- line number of Gcode
@@ -553,7 +569,7 @@ sub mapGcode {
                   print $fho "; do=$do, dc=$dc, ef=$ef ed=$ed\n" if($conf->{verbose});
                   $eabs = sprintf("%.5f",$eabs);
 
-                  print $fho "G1 ${p}X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion $f ($n of $steps)\n";
+                  print $fho "G1 ${p}X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion ".sprintf("%.2f",$f)." ($n of $steps)\n";
 
                   $lxc = $x1; $lyc = $y1; $lzc = $z1;
 
@@ -602,7 +618,7 @@ sub mapGcode {
    
                $rot = sprintf("%.5f",$rot);
 
-               print $fho "G1 ${p}X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion $f ($n of $steps)\n";
+               print $fho "G1 ${p}X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion ".sprintf("%.2f",$f)." ($n of $steps)\n";
 
                $lxc = $x1; $lyc = $y1; $lzc = $z1;
                $p =~ s/F[\-\d\.]+//;            # -- for next segments do not need feed rate (speed) anymore
@@ -653,7 +669,7 @@ sub mapGcode {
       print $fho "; slicer4rtn end-gcode:\n";
       my $g = "$conf->{end_gcode}\n";
       $g =~ s/\\n/\n/g;
-      print $fho "$g\n";
+      print $fho "$g; /slicer4rtn end-gcode\n";
    }
 
    close $fh;
