@@ -64,7 +64,7 @@ in `~/.config/slicer4rtn/` as those will not be overwritten in future upgrades w
 ## Usage
 ```
 % ./slicer4rtn
-USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
+USAGE Slicer4RTN 0.5.0: [<opts>] <file.stl> ...
    options:
       -v or --verbose      increase verbosity
       --version            display version and exit
@@ -90,7 +90,9 @@ USAGE Slicer4RTN 0.4.4: [<opts>] <file.stl> ...
       --inter-steps=<n>    set interpolation steps per mm (default: 2)
       --motion-minz=<v>    set minimum Z level for motion (without extrusion) (default: 0.2)
       --max-speed=<s>      set maximum speed (default: 0)
-      --slicer=<slicer>    set core slicer (default: 'slic3r')
+      --slicer=<slicer>    set core slicer slic3r, prusa-slicer, CuraEngine{Legacy}, cura-slicer, mandoline (default: 'slic3r')
+      --start-gcode=...    set start gcode (disables core slicer's start-gcode)
+      --end-gcode=...      set end gcode (disables core slicer's end-gcode)
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer (slic3r)
       
