@@ -372,7 +372,7 @@ sub recenterModel {
 sub levelModel {
    my($m) = @_;
    foreach my $v (@{$m->{vertices}}) {
-      $v->{c}->[2] += $m->{min}->[2];
+      $v->{c}->[2] -= $m->{min}->[2];
    }
    measureModel($m);
 }
