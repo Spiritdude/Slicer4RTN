@@ -44,7 +44,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.4.8';
+my $VERSION = '0.5.0';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
