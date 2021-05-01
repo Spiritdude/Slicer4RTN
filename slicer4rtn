@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/05/01: 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump
 # 2021/04/27: 0.4.8: support of start-gcode and end-gcode
 # 2021/04/15: 0.4.7: cleaner X Y Z output
 # 2021/03/23: 0.4.6: adding support for 'cura-slicer' (CuraEngine wrapper https://github.com/Spiritdude/Cura-CLI-Wrapper)
