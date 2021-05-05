@@ -967,9 +967,9 @@ sub readOFF {
             s/^\s+//;
             my(@v) = split(/\s+/);
             @v = map { $_ * 1 } @v;
-            for(my $i=0; $i<$v[0]-2; $i++) {
-               my(@f) = @v[($i+1)..($i+1+2)];
-               push(@{$p->{volumes}->[0]->{triangles}},{v=>\@f});
+            shift(@v);     # -- first count
+            foreach my $i (0..$#v-2) {
+               push(@{$p->{volumes}->[0]->{triangles}},{v=>[$v[0],$v[$i+1],$v[$i+2]]});
             }
             $nf--;
          } elsif($t==2 && $nv == 0 && $nf == 0) {
