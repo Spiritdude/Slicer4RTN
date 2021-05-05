@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/05/05: 0.5.1: experimentally support .off, .obj, both more compact than .stl
 # 2021/05/01: 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump
 # 2021/04/27: 0.4.8: support of start-gcode and end-gcode
 # 2021/04/15: 0.4.7: cleaner X Y Z output
@@ -44,11 +45,12 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.5.0';
+my $VERSION = '0.5.1';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
 my $conf = {
+   intern_format => 'stl',
    slicer => 'slic3r',
    mode => 'outside',
    axis => 4,
@@ -259,8 +261,8 @@ foreach my $fn (@fs) {
       exit -1;
    }
    print "processing '$fn':\n";
-   print "   1/5 read stl\n";
-   my $m = readSTL($fn);
+   print "   1/5 read model\n";
+   my $m = readModel($fn);
 
    for(my $n=1; $n<=$conf->{subdivide}; $n++) {
       print "      $n/$conf->{subdivide} subdivide ";
@@ -274,17 +276,20 @@ foreach my $fn (@fs) {
    
    measureModel($m), levelModel($m); # if($conf->{slicer}=~/Cura/);
    
-   my($tmp_gcode,$tmp_stl) = ("./tmp-$$.gcode","./tmp-$$.stl");
-   print "   3/5 write temporary stl\n";
-   writeSTLB($tmp_stl,$m);
-   push(@rm,$tmp_stl);
+   my($tmp_gcode,$tmp_model) = ("./tmp-$$.gcode","./tmp-$$.$conf->{intern_format}");
+   print "   3/5 write temporary model\n";
 
-   print "   4/5 slice ($conf->{slicer}) stl\n";
+   $tmp_model =~ s/\.\w+$/.stl/ if($conf->{slicer} =~ /(cura|mandoline)/i);      # -- cura & mandoline only manage STL
+
+   writeModel($tmp_model,$m);
+   push(@rm,$tmp_model);
+
+   print "   4/5 slice ($conf->{slicer}) model\n";
    if(fork()==0) {
       my(@a) = ($conf->{slicer});
       push(@a,$conf->{slicer} =~ /CuraEngine$/ ? 
-         ("slice","-j","/usr/share/$app/fdmprinter.def.json","-s","machine_center_is_zero=true","-s","extruder_nr=0",@slicer_args,"-o",$tmp_gcode,"-l",$tmp_stl) :
-         (@slicer_args,"-o",$tmp_gcode,$tmp_stl) );
+         ("slice","-j","/usr/share/$app/fdmprinter.def.json","-s","machine_center_is_zero=true","-s","extruder_nr=0",@slicer_args,"-o",$tmp_gcode,"-l",$tmp_model) :
+         (@slicer_args,"-o",$tmp_gcode,$tmp_model) );
       print "$app INF: @a\n" if($conf->{verbose});
       # -- is important, as CuraEngine is chatty and closing only STDERR will pollute the resulting G-code with error messages(!!)
       close STDERR, close STDOUT if($conf->{slicer} =~ /CuraEngine$/ && $conf->{verbose}==0);      
@@ -313,7 +318,7 @@ foreach my $fn (@fs) {
    print " ($ln lines)\n";
    
    if($conf->{keep}) {
-      print "$app: $tmp_stl and $tmp_gcode kept\n";
+      print "$app: $tmp_model and $tmp_gcode kept\n";
    } else {
       unlink @rm;
    }
@@ -752,7 +757,37 @@ sub parseConfig {
    close $fh;
    return $c;
 }
+
+sub readModel {
+   my($fn) = @_;
+   if($fn =~ /\.off$/i) {
+      return readOFF($fn);
+   } elsif($fn =~ /\.obj$/i) {
+      return readOBJ($fn);
+   } elsif($fn =~ /\.stl$/i || $fn =~ /\.stl[ab]$/i) {
+      return readSTL($fn);
+   } else {
+      print "ERROR: file-format \"$fn\" not supported (only .stl, .off or .obj)\n";
+      exit -1;
+   }
+}
    
+sub writeModel {
+   my($fn,$m) = @_;
+   if($fn =~ /\.off$/i) {
+      writeOFF($fn,$m);
+   } elsif($fn =~ /\.obj$/i) {
+      writeOBJ($fn,$m);
+   } elsif($fn =~ /\.stla$/i) {
+      writeSTLA($fn,$m);
+   } elsif($fn =~ /\.stl$/i) {
+      writeSTLB($fn,$m);
+   } else {
+      print "ERROR: file-format \"$fn\" not supported (only .stl, .off or .obj)\n";
+      exit -1;
+   }
+}
+
 sub writeSTLA {
    my($fn,$m) = @_;
    open(my $fh,">",$fn);
@@ -897,5 +932,138 @@ sub readSTL {
    }
    close $fh;
    return $m;
+}
+
+sub readOFF {
+   my($fn) = @_;
+   my $p = { };
+   
+   my $err;
+
+   my(@min,@max);
+   $min[0] = $min[1] = $min[2] = 1e6;
+   $max[0] = $max[1] = $max[2] = -1e6;
+   
+   if(open(my $fh,"<",$fn)) {
+      my($nv,$nf); 
+      my $t = 0;
+      while(<$fh>) {
+         s/\n$//;
+         next if(/^\s*#/||/^\s*$/);
+         $t += 2, $nv = $1, $nf = $2, next if($t==0 && /^OFF\s+(\d+)\s+(\d+)/);     # -- single line (OpenSCAD export like this)
+         $t++, next if($t==0 && /^OFF$/);                                           # -- 1st line
+         $t++, $nv = $1, $nf = $2, next if($t==1 && /^(\d+)\s+(\d+)/);              # -- 2nd line
+         if($t==2 && $nv > 0) {
+            s/^\s+//;
+            my(@c) = split(/\s+/);
+            @c = map { $_ * 1 } @c;
+            push(@{$p->{vertices}},{c=>[$c[0],$c[1],$c[2]]});
+            for(my $i=0; $i<3; $i++) {
+               $min[$i] = $c[$i] if($min[$i]>$c[$i]);
+               $max[$i] = $c[$i] if($max[$i]<$c[$i]);
+            }
+            $nv--;
+         } elsif($t==2 && $nv == 0 && $nf > 0) {
+            s/^\s+//;
+            my(@v) = split(/\s+/);
+            @v = map { $_ * 1 } @v;
+            for(my $i=0; $i<$v[0]-2; $i++) {
+               my(@f) = @v[($i+1)..($i+1+2)];
+               push(@{$p->{volumes}->[0]->{triangles}},{v=>\@f});
+            }
+            $nf--;
+         } elsif($t==2 && $nv == 0 && $nf == 0) {
+            last;
+         }
+      }
+      close $fh;
+      # -- keep min/max/size up-to-date
+      $p->{min} = \@min;
+      $p->{max} = \@max;
+      $p->{size} = [$max[0]-$min[0],$max[1]-$min[1],$max[2]-$min[2]];
+      return $p;
+   }
+}
+
+sub writeOFF {
+   my($fn,$m) = @_;
+   my $fc = 0;
+
+   open(my $fh,">",$fn);
+   foreach my $v (@{$m->{volumes}}) {
+      $fc += scalar @{$v->{triangles}};
+   }
+   print $fh "OFF\n\n".sprintf("%d %d %d\n",scalar @{$m->{vertices}},$fc,0);
+   foreach my $v (@{$m->{vertices}}) {
+      print $fh sprintf("%.5f %.5f %.5f\n",$v->{c}->[0],$v->{c}->[1],$v->{c}->[2]);
+   }
+   foreach my $v (@{$m->{volumes}}) {
+      foreach my $f (@{$v->{triangles}}) {
+         print $fh sprintf("3 %d %d %d\n",$f->{v}->[0],$f->{v}->[1],$f->{v}->[2]);
+      }
+   }
+   close($fh);
+}
+
+sub readOBJ {
+   my($fn) = @_;
+   my $p = { };
+   
+   my $err;
+
+   my(@min,@max);
+   $min[0] = $min[1] = $min[2] = 1e6;
+   $max[0] = $max[1] = $max[2] = -1e6;
+   
+   if(open(my $fh,"<",$fn)) {
+      my(@vs);
+      while(<$fh>) {
+         chop;
+         next if(/^\s*#/);
+         if(/^v /) {
+            my(@c) = split(/ +/);
+            shift(@c);
+            push(@{$p->{vertices}},{c=>[$c[0]*1,$c[1]*1,$c[2]*1]});
+            for(my $i=0; $i<3; $i++) {
+               $min[$i] = $c[$i] if($min[$i]>$c[$i]);
+               $max[$i] = $c[$i] if($max[$i]<$c[$i]);
+            }
+         } elsif(/^f /) {
+            my(@c) = split(/ +/);
+            shift(@c);
+            @c = map { $_-1 } @c;
+            foreach my $i (0..$#c-2) {
+               push(@{$p->{volumes}->[0]->{triangles}},{v=>[$c[0],$c[$i+1],$c[$i+2]]});
+            }
+         } elsif(/^\s*$/) {
+            ;
+         } elsif(/^(\S+)/) {
+            print "WARN: '$1' in <$fn> not supported yet, ignored\n";
+         }
+      }
+      close $fh;
+      
+      # -- keep min/max/size up-to-date
+      $p->{min} = \@min;
+      $p->{max} = \@max;
+      $p->{size} = [$max[0]-$min[0],$max[1]-$min[1],$max[2]-$min[2]];
+      #print toJSON($p);
+      return $p;
+   }
+}
+
+sub writeOBJ {
+   my($fn,$p) = @_;
+   if(open(my $fh,">",$fn)) {
+      foreach my $v (@{$p->{vertices}}) {
+         print $fh sprintf("v %.5f %.5f %.5f\n",$v->{c}->[0],$v->{c}->[1],$v->{c}->[2]);
+      }
+      foreach my $v (@{$p->{volumes}}) {
+         foreach my $f (@{$v->{triangles}}) {
+            print $fh sprintf("f %d %d %d\n",$f->{v}->[0]+1,$f->{v}->[1]+1,$f->{v}->[2]+1);
+         }
+      }
+      close $fh;
+   }
 }
 
