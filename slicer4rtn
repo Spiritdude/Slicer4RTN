@@ -51,6 +51,7 @@ my($app) = ($0=~/\/([^\/]+)$/);
 
 my $conf = {
    intern_format => 'stl',
+   original_gcode => 1,
    slicer => 'slic3r',
    mode => 'outside',
    axis => 4,
@@ -506,7 +507,7 @@ sub mapGcode {
       #
       #    *** DO NOT MIX THOSE, otherwise you create a mess (literally on your printbed) ***
       
-      print $fho "; $_\n" if(/^G[01] /);     # -- maintain original unlatered G-code (for now)
+      print $fho "; $_\n" if(/^G[01] / && $conf->{original_gcode});     # -- maintain original unlatered G-code (for now)
 
       if(/^G[01] (.*)X([\-\d\.]+) Y([\-\d\.]+)(.*)$/) {      # -- moving X/Y in the vertical layer
          my($p,$x,$y,$r) = ($1,$2,$3,$4);
@@ -574,7 +575,7 @@ sub mapGcode {
 
                   my $ed = ($e - $le) / $steps * $ef * $efa * $conf->{erate}; $eabs += $ed;
 
-                  print $fho "; do=$do, dc=$dc, ef=$ef ed=$ed\n" if($conf->{verbose});
+                  print $fho "; do=$do, dc=$dc, ef=$ef ed=$ed\n" if($conf->{original_gcode} && $conf->{verbose});
                   $eabs = sprintf("%.5f",$eabs);
 
                   print $fho "G1 ${p}X$x1 Y$y1 Z$z1 E$eabs $conf->{rot_gcode}$rot $xtr$r; extrusion ".sprintf("%.2f",$f)." ($n of $steps)\n";
@@ -1066,4 +1067,5 @@ sub writeOBJ {
       close $fh;
    }
 }
+
 
