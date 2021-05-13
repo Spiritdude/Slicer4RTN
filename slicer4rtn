@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/05/13: 0.5.2: --rotate, --scale and --translate added for pre-processing model
 # 2021/05/05: 0.5.1: experimentally support .off, .obj, both more compact than .stl
 # 2021/05/01: 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump
 # 2021/04/27: 0.4.8: support of start-gcode and end-gcode
@@ -45,7 +46,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.5.1';
+my $VERSION = '0.5.2';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -73,14 +74,17 @@ my $conf = {
    rot_gcode => 'A',
    rot_revolv => 1,
    rot_offset => -90,
-   tilt_gcode => 'B'
+   tilt_gcode => 'B',
 };
 
 my $confUnset = {
    output => 1,
    rot_fixed => 1,
    start_gcode => 1,
-   end_gcode => 1 
+   end_gcode => 1, 
+   rotate => 1,
+   translate => 1,
+   scale => 1
 };
 
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
@@ -100,6 +104,7 @@ foreach my $p ("/usr/share/$app","$ENV{HOME}/.config/$app") {     # -- check sys
 
 my @fs;
 my @slicer_args_cli;
+my @transform;
 
 foreach(@ARGV) {                            # -- preprocess all command-line arguments
    my($s,$k,$v);
@@ -119,6 +124,8 @@ foreach(@ARGV) {                            # -- preprocess all command-line arg
          push(@slicer_args_cli,
             $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
             $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
+      } elsif($k_ =~ /^(rotate|translate|scale)$/) {
+         push(@transform,"$k_=$v");
       } else {
          $conf->{$k_} = $v;                                                   # -- general settings
       }
@@ -209,6 +216,10 @@ if($conf->{help} || @fs <= 0) {
       -v or --verbose      increase verbosity
       --version            display version and exit
       -k or --keep         keep all temporary files (temp.stl, temp.gcode)
+      --rotate=<x,y,z>     rotate model
+      --translate=<x,y,z>  translate model
+      --scale=<s>          scale uniform
+      --scale=<x,y,z>      scale individually
       --recenter           recenter model X- & Y-wise
       --subdivide=<n>      set midpoint subdivisions (default: $conf->{subdivide})
       --mode=<mode>        set cone mode, either 'outside' or 'inside' (default: '$conf->{mode}')
@@ -265,12 +276,29 @@ foreach my $fn (@fs) {
    print "   1/5 read model\n";
    my $m = readModel($fn);
 
+   measureModel($m);
+   recenterModel($m) if($conf->{recenter});
+
+   foreach my $t (@transform) {
+      my($type,$v) = ($t=~/(\w+)=(.*)/);
+      print "      transform: $type $v\n";
+      if($type eq 'rotate') {
+         $m = rotateModel($m,[split(/,/,$v)]);
+      } elsif($type eq 'translate') {
+         $m = translateModel($m,[split(/,/,$v)]);
+      } elsif($type eq 'scale') {
+         $m = scaleModel($m,[split(/,/,$v)]);
+      }
+   }
+   measureModel($m) if(@transform>0);
+   
+   # print to_json($m,{pretty=>1,canonical=>1});
+   
    for(my $n=1; $n<=$conf->{subdivide}; $n++) {
       print "      $n/$conf->{subdivide} subdivide ";
       $m = subdivideModel($m);
    }
-   measureModel($m);
-   recenterModel($m) if($conf->{recenter});
+   measureModel($m) if($conf->{subdivide}>0);
    
    print "   2/5 map vertices\n";
    mapVertices($m);
@@ -739,6 +767,61 @@ sub midpoint {
    }
    return $pm;
 }
+
+sub modelTransform {
+   my($m,$f) = @_;
+   my $n = @{$m->{vertices}};
+   for(my $i=0; $i<$n; $i++) {
+      my(@pn) = &$f(@{$m->{vertices}->[$i]->{c}});
+      $m->{vertices}->[$i]->{c} = \@pn;
+   }
+   return $m;
+}
+
+sub scaleModel {
+   my($m,$t) = @_;
+   $t = [$t->[0],$t->[0],$t->[0]] if(@$t < 3);
+   $m = modelTransform($m,sub { 
+      my(@p) = @_;
+      return($p[0]*$t->[0],$p[1]*$t->[1],$p[2]*$t->[2]);
+   });
+   return $m;
+}
+
+sub translateModel {
+   my($m,$t) = @_;
+   $m = modelTransform($m,sub { 
+      my(@p) = @_;
+      return($p[0]+$t->[0],$p[1]+$t->[1],$p[2]+$t->[2]);
+   });
+   return $m;
+}
+
+sub rotateModel {
+   my($m,$r) = @_;
+   my(@rs) = ($r->[0] * pi/180,$r->[1] * pi/180,$r->[2] * pi/180);
+
+   $m = modelTransform($m,sub { 
+      my(@p) = @_;
+      my(@pn);
+      # -- x
+      $pn[0] = $p[0];  
+      $pn[1] = $p[1]*cos($rs[0]) - $p[2]*sin($rs[0]);
+      $pn[2] = $p[1]*sin($rs[0]) + $p[2]*cos($rs[0]);
+      @p = @pn;
+      # -- y
+      $pn[0] = $p[0]*cos($rs[1]) + $p[2]*sin($rs[1]);
+      $pn[1] = $p[1];
+      $pn[2] = $p[2]*cos($rs[1]) - $p[0]*sin($rs[1]);
+      @p = @pn;
+      # -- z
+      $pn[0] = $p[0]*cos($rs[2]) - $p[1]*sin($rs[2]);
+      $pn[1] = $p[0]*sin($rs[2]) + $p[1]*cos($rs[2]);
+      $pn[2] = $p[2];
+      return (@pn);
+   });
+   return $m;
+}   
 
 sub parseConfig {
    my($fn) = @_;

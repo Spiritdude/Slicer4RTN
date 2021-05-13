@@ -21,6 +21,8 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 - Linux Ubuntu/Debian, tested on Ubuntu 20.04 LTS
 
 ## Updates
+- 0.5.2: --rotate, --scale and --translate added for pre-processing model
+- 0.5.1: experimentally support .off, .obj, both more compact than .stl
 - 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump
 - 0.4.8: support of start-gcode and end-gcode
 - 0.4.7: cleaner X Y Z output
@@ -64,11 +66,15 @@ in `~/.config/slicer4rtn/` as those will not be overwritten in future upgrades w
 ## Usage
 ```
 % ./slicer4rtn
-USAGE Slicer4RTN 0.5.0: [<opts>] <file.stl> ...
+USAGE Slicer4RTN 0.5.2: [<opts>] <file.stl> ...
    options:
       -v or --verbose      increase verbosity
       --version            display version and exit
       -k or --keep         keep all temporary files (temp.stl, temp.gcode)
+      --rotate=<x,y,z>     rotate model
+      --translate=<x,y,z>  translate model
+      --scale=<s>          scale uniform
+      --scale=<x,y,z>      scale individually
       --recenter           recenter model X- & Y-wise
       --subdivide=<n>      set midpoint subdivisions (default: 2)
       --mode=<mode>        set cone mode, either 'outside' or 'inside' (default: 'outside')
