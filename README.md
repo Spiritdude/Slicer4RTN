@@ -21,6 +21,7 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 - Linux Ubuntu/Debian, tested on Ubuntu 20.04 LTS
 
 ## Updates
+- 0.6.0: $efa multiplier adjusted, --rot-revolve=0 (new default, unlimited revolv), --rot-revolve=1 (single revolv) does performs smart rotate-around to immitate continenous rotation
 - 0.5.2: --rotate, --scale and --translate added for pre-processing model
 - 0.5.1: experimentally support .off, .obj, both more compact than .stl
 - 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump

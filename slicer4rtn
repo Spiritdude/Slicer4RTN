@@ -15,6 +15,7 @@
 #        https://github.com/Spiritdude/Slicer4RTN
 #
 # History:
+# 2021/06/02: 0.6.0: $efa multiplier adjusted, --rot-revolve=0 (new default, unlimited revolv), --rot-revolve=1 (single revolv) does performs smart rotate-around to immitate continenous rotation
 # 2021/05/13: 0.5.2: --rotate, --scale and --translate added for pre-processing model
 # 2021/05/05: 0.5.1: experimentally support .off, .obj, both more compact than .stl
 # 2021/05/01: 0.5.0: fixing levelModel() affected CuraEngine/cura-slicer, version bump
@@ -46,7 +47,7 @@ use POSIX;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
-my $VERSION = '0.5.2';
+my $VERSION = '0.6.0';
 
 my($app) = ($0=~/\/([^\/]+)$/);
 
@@ -72,7 +73,7 @@ my $conf = {
    verbose => 0,
    recenter => 0,
    rot_gcode => 'A',
-   rot_revolv => 1,
+   rot_revolv => 0,
    rot_offset => -90,
    tilt_gcode => 'B',
 };
@@ -520,9 +521,10 @@ sub mapGcode {
    my $lyn = 0;      # -- layer number (0..n)
    my $zcmax = 0;
 
-   my $efa = cos($conf->{angle}/180*pi())**2;         # -- this is the main extrusion correction ratio (multiplier)
+   my $efa = cos($conf->{angle}/180*pi());         # -- this is the main extrusion correction ratio (multiplier)
 
    my $first_move_done = 0;
+   my $lrot;
 
    while(<$fh>) {
       chop;
@@ -561,7 +563,7 @@ sub mapGcode {
 
             $r =~ s/ E[\-\d\.]+//;  # -- remove E.. from $r(est), we add it again with new value
             $p =~ s/ E[\-\d\.]+//;  # -- remove E.. from $p(re), we add it again with new value
-
+            
             for(my $n=1; $n<=$steps; $n++) {       # -- single G1 extrusion segment will be sub-segmented in $steps
                my $f = $n/$steps;      # -- fader 1.0/steps .. 1.0
 
@@ -576,20 +578,28 @@ sub mapGcode {
 
                my($x1,$y1,$z1,$rot) = conicSpaceMapping($cx,$cy,$x0,$y0,$z0,$mo);
 
+               $rabs -= fmod($rabs,360)-180-$rot;
+               $rot = $rabs + $conf->{rot_offset} if($conf->{rot_revolv}==0);
+               #$rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
+               if($conf->{rot_revolv}==1) {
+                  $rot = fmod($rot+360+$conf->{rot_offset},360)-180;
+                  if(!defined $conf->{rot_fixed} && defined $lrot && abs($lrot-$rot)>180 && sqrt($x1*$x1+$y1*$y1) > 1) {
+                     my $g = rotate_around($lrot,$rot,sqrt($x1*$x1+$y1*$y1),{xoff=>$xoff,yoff=>$yoff});
+                     print $fho join('',@$g);
+                  }
+               }
+               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
+               
                $x1 += $xoff;
                $y1 += $yoff;
                $z1 += $zoff;
                $z1 += $conf->{zoff};
 
-               $rabs -= fmod($rabs,360)-180-$rot;
-               $rot = $rabs + $conf->{rot_offset} if($conf->{rot_revolv}==0);
-               $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
-               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
-
                $x1 = sprintf("%.5f",$x1);
                $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
-               $rot = sprintf("%.5f",$rot);
+               $rot = sprintf("%.3f",$rot);
+               $lrot = $rot;
 
                if(1) {
                   # -- I'm aware $do does not need to be calculated here (can move outside of for() but I keep it here until interpolation calculation is finalized)
@@ -629,7 +639,7 @@ sub mapGcode {
             my $steps = $first_move_done ? 3 : 1;        # -- first move perform motion direct, otherwise conic mapped
             my $e = 0;
             print $fho "; from $lz to $z (zoff=$zoff,conf.zoff=$conf->{zoff})\n" if($conf->{verbose});
-
+            
             for(my $n=1; $n<=$steps; $n++) {
                my $f = $n/$steps;
                my($x0,$y0,$z0,$e0) = ((1-$f)*$lx + $f*$x, (1-$f)*$ly + $f*$y, (1-$f)*$lz + $f*$z, (1-$f)*$le + $f*$e);
@@ -638,22 +648,29 @@ sub mapGcode {
                
                my($x1,$y1,$z1,$rot) = conicSpaceMapping($cx,$cy,$x0,$y0,$z0,$mo);
                
+               $rabs -= fmod($rabs,360)-180-$rot;
+               $rot = $rabs+$conf->{rot_offset} if($conf->{rot_revolv}==0);
+               if($conf->{rot_revolv}==1) {
+                  $rot = fmod($rot+360+$conf->{rot_offset},360)-180;
+                  if(!defined $conf->{rot_fixed} && defined $lrot && abs($lrot-$rot)>180 && sqrt($x1*$x1+$y1*$y1) > 1) {
+                     my $g = rotate_around($lrot,$rot,sqrt($x1*$x1+$y1*$y1),{xoff=>$xoff,yoff=>$yoff});
+                     print $fho join('',@$g);
+                  }
+               }
+               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
+               
                $x1 += $xoff;
                $y1 += $yoff;
                $z1 += $zoff;
                $z1 += $conf->{zoff};
-               
-               $rabs -= fmod($rabs,360)-180-$rot;
-               $rot = $rabs+$conf->{rot_offset} if($conf->{rot_revolv}==0);
-               $rot = fmod($rot+360+$conf->{rot_offset},360)-180 if($conf->{rot_revolv}==1);
-               $rot = $conf->{rot_fixed} if(defined $conf->{rot_fixed});
                
                $x1 = sprintf("%.5f",$x1);
                $y1 = sprintf("%.5f",$y1);
                $z1 = sprintf("%.5f",$z1);
                $z1 = $conf->{motion_minz} if($z1 < $conf->{motion_minz});
    
-               $rot = sprintf("%.5f",$rot);
+               $rot = sprintf("%.3f",$rot);
+               $lrot = $rot;
 
                print $fho "G1 ${p}X$x1 Y$y1 Z$z1 $conf->{rot_gcode}$rot $xtr$r; motion ".sprintf("%.2f",$f)." ($n of $steps)\n";
 
@@ -713,6 +730,35 @@ sub mapGcode {
    close $fo;
 
    return $tot_ln;
+}
+
+sub rotate_around {
+   my($lrot,$rot,$d,$opts) = @_;
+   
+   my $n = int(abs($lrot-$rot)*$d/1);
+   $n = 2 if($n<2);
+   $n = 8 if($n>8);
+   
+   my @g;
+   
+   for(my $i=1; $i<$n; $i++) {
+      my $f = $i/$n;
+      my $a = $lrot*(1-$f) + $rot*$f;                          # -- interpolate linearly
+      my $ar = ($a + $conf->{rot_offset}) / 180 * pi();        # -- calculate angle in math realm
+      my $d2 = $d + 1;
+
+      my($x,$y) = (cos($ar)*$d2, sin($ar)*$d2);                # -- recalculate x,y with an additional 1mm to rotate around
+
+      $x += $opts->{xoff};
+      $y += $opts->{yoff};
+
+      $x = sprintf("%.5f",$x);
+      $y = sprintf("%.5f",$y);
+      $a = sprintf("%.3f",$a);
+
+      push(@g,"G1 X$x Y$y $conf->{rot_gcode}$a ; rotate around ($i of $n steps, $lrot => $rot)\n");
+   }
+   return \@g;
 }
 
 sub subdivideModel {
