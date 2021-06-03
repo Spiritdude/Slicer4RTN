@@ -67,7 +67,7 @@ in `~/.config/slicer4rtn/` as those will not be overwritten in future upgrades w
 ## Usage
 ```
 % ./slicer4rtn
-USAGE Slicer4RTN 0.5.2: [<opts>] <file.stl> ...
+USAGE Slicer4RTN 0.6.0: [<opts>] <file.stl> ...
    options:
       -v or --verbose      increase verbosity
       --version            display version and exit
@@ -86,7 +86,7 @@ USAGE Slicer4RTN 0.5.2: [<opts>] <file.stl> ...
       --bed-center=<cx,cy> set bed-enter, only affects output G-code (default: 100,100)
       --layer-height=<z>   set conic layer height (default: 0.2)
       --rot-gcode=<v>      set G-code symbol for rotation (default: A)
-      --rot-revolv=<mode>  set rotation revolution, 0 = unlimited, 1 = once (default: 1)
+      --rot-revolv=<mode>  set rotation revolution, 0 = unlimited, 1 = once (default: 0)
       --rot-offset=<a>     set rotation offset (default: -90)
       --rot-fixed=<angle>  set fixed rotation angle, usable if --axis=3 but 4-axis or 5-axis printer is target
       --tilt-gcode=<v>     set G-code symbol for tilt for 5-axis operation (default: B)
@@ -102,7 +102,7 @@ USAGE Slicer4RTN 0.5.2: [<opts>] <file.stl> ...
       --end-gcode=...      set end gcode (disables core slicer's end-gcode)
       --slicer.<k>=<v>     add additional slicer arguments, e.g. --slicer.infill-density=0
       --<k>=<v>            all other arguments not for slicer4rtn will be passed to the core slicer (slic3r)
-      
+
    examples:
       slicer4rtn sphere.stl
       slicer4rtn overhang.stl --output=sample.gcode
