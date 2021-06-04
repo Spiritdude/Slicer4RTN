@@ -735,9 +735,9 @@ sub mapGcode {
 sub rotate_around {
    my($lrot,$rot,$d,$opts) = @_;
    
-   my $n = int(abs($lrot-$rot)*$d/1);
+   my $n = int(abs($lrot-$rot)*$d/36);        # 360deg * 10mm = 3600 / 36 = 100 segments
    $n = 2 if($n<2);
-   $n = 8 if($n>8);
+   $n = 100 if($n>100);
    
    my @g;
    
