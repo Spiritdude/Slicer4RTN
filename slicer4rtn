@@ -964,7 +964,7 @@ sub writeSTLB {
    # REAL32[3]  Vertex 3
    # UINT16  Attribute byte count
    # end
-   open(my $fh,">",$fn);
+   open(my $fh,">:raw",$fn);
    print $fh " "x80;
    my $ft = 0;
    foreach my $v (@{$m->{volumes}}) {
@@ -1029,6 +1029,7 @@ sub readSTL {
       # UINT16  Attribute byte count
       # end
       my $buff;
+      binmode ($fh);
 
       read($fh,$buff,80);
       read($fh,$buff,4);
