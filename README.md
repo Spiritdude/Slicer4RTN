@@ -19,7 +19,12 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 
 ## Supported Platforms
 - Linux Ubuntu/Debian, tested on Ubuntu 20.04 LTS
+- Windows (tested on Windows 10)
 
+## Windows Notes
+* When calling Slic3r, you must give the full path to the slic3r-console.exe file, but you MUST drop the .exe suffix, and write slic3r-console in all lowercase, even if the file is installed as Slic3r-console.exe . For example: `--slicer=c:\instpath\slic3r\slic3r-console`
+* When calling PrusaSlicer, you must give the full path to the prusa-slicer-console.exe file, but you MUST drop the .exe suffix, and write prusa-slicer-console in all lowercase. For example: `--slicer=c:\instpath\PrusaSlicer\prusa-slicer-console`
+* When calling Cura, you must give the full path to the CuraEngine.exe file, but you MUST drop the .exe suffix, and write CuraEngine in the exact form as here (2 capitalized words). For example: `--slicer=c:\instpath\Cura\CuraEngine`
 ## Updates
 - 0.6.0: $efa multiplier adjusted, --rot-revolve=0 (new default, unlimited revolv), --rot-revolve=1 (single revolv) does performs smart rotate-around to immitate continenous rotation
 - 0.5.2: --rotate, --scale and --translate added for pre-processing model
