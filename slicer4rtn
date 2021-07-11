@@ -52,6 +52,8 @@ my $APPNAME = 'Slicer4RTN';
 my $VERSION = '0.6.0';
 
 my $app;
+my @app_path;
+
 if ("$^O" eq "linux") {
    ($app) = ($0=~/\/([^\/]+)$/);
    @app_path = ("/usr/share/$app","$ENV{HOME}/.config/$app");
@@ -105,8 +107,8 @@ my $confUnset = {
 my %sf2l = ( 'v'=>'verbose', 'k'=>'keep' );
 my(@slicer_args);
 
-foreach my $p @app_path {     # -- check system-wide and user settings
-   open(my $fh,"<",catfile($p, "$app.ini");
+foreach my $p (@app_path) {     # -- check system-wide and user settings
+   open(my $fh,"<",catfile($p, "$app.ini"));
    while(<$fh>) {
       chop;
       next if(/^\s*#/);
@@ -181,7 +183,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
    push(@slicer_args,'--start-gcode=;') if(defined $conf->{start_gcode});
    push(@slicer_args,'--end-gcode=;') if(defined $conf->{end_gcode});
-   foreach my $p @app_path {
+   foreach my $p (@app_path) {
       my $c = parseConfig(catfile($p, "mandoline.ini"));
       foreach my $k (keys %$c) {
          push(@slicer_args,'-S',"$k=$c->{$k}");
@@ -193,7 +195,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
    push(@slicer_args,'-s','machine_start_gcode=;') if(defined $conf->{start_gcode});
    push(@slicer_args,'-s','machine_end_gcode=;') if(defined $conf->{end_gcode});
-   foreach my $p @app_path {
+   foreach my $p (@app_path) {
       my $c = parseConfig(catfile($p, "CuraEngine.ini"));
       foreach my $k (keys %$c) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
@@ -203,7 +205,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
 } elsif($conf->{slicer} =~ /CuraEngineLegacy$/) {
    push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$lhc*1000,
       '-s','skirtLineCount=0','-s','downSkinCount=3','-s','upSkinCount=3','-s','filamentDiameter=1750');
-   foreach my $p @app_path {
+   foreach my $p (@app_path) {
       my $c = parseConfig(catfile($p, "CuraEngineLegacy.ini"));
       foreach my $k (keys %$c) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
@@ -214,7 +216,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
    push(@slicer_args,'--layer_height='.$lhc);
    push(@slicer_args,'--machine_start_gcode=;') if(defined $conf->{start_gcode});
    push(@slicer_args,'--machine_end_gcode=;') if(defined $conf->{end_gcode});
-   foreach my $p @app_path {
+   foreach my $p (@app_path) {
       my $c = parseConfig(catfile($p, "cura-slicer.ini"));
       foreach my $k (keys %$c) {
          push(@slicer_args,"--$k=$c->{$k}");
