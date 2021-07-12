@@ -25,6 +25,9 @@ A future version of Slicer4RTN might segment volumes and support multiple conic 
 * When calling Slic3r, you must give the full path to the slic3r-console.exe file.
 * When calling PrusaSlicer, you must give the full path to the prusa-slicer-console.exe file.
 * When calling Cura, you must give the full path to the CuraEngine.exe file.
+* Global files are installed under `C:\ProgData\slicer4rtn` .  Specifically, the script itself is installed under `C:\ProgData\slicer4rtn\bin\slicer4rtn`  
+* Local files are installed under `%APPDATA%\slicer4rtn` .  
+
 ## Updates
 - 0.6.0: $efa multiplier adjusted, --rot-revolve=0 (new default, unlimited revolv), --rot-revolve=1 (single revolv) does performs smart rotate-around to immitate continenous rotation
 - 0.5.2: --rotate, --scale and --translate added for pre-processing model
