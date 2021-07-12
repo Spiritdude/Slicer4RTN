@@ -225,6 +225,7 @@ if($conf->{install}) {
    my $dir = catfile(dirname($0), "settings");
    opendir(DIR, $dir);
    my @files = readdir(DIR);
+   closedir(DIR);
    for my $f (@files) {
       next if($f =~ /^[\.]{1,2}$/);
       my $sf = catfile($dir, $f);
