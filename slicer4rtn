@@ -47,6 +47,7 @@ use POSIX;
 use File::Basename;
 use File::Spec::Functions 'catfile';
 use File::Copy;
+use File::Compare;
 #use JSON;
 
 my $APPNAME = 'Slicer4RTN';
@@ -188,8 +189,9 @@ if($conf->{version}) {
 # Install script...
 #
 if($conf->{install}) {
-   $dest = catfile($conf->{user} ? $home : $ENV{"PROGRAMDATA"}, "bin");
-   for my $d ($dest, $app_path[1]) {
+   $dest = catfile(catfile(($conf->{user} ? $home : $ENV{"PROGRAMDATA"}), $app), "bin");
+   # create user and glogal setting dirs
+   for my $d (@app_path, $dest) {
       if (! -d $d) {
          print ($d , " doesnt exist! Creating it...\n");
          mkdir ($d);
@@ -199,15 +201,18 @@ if($conf->{install}) {
          }
       }
    }
+   # copy app to bin dir
    $fullapp =  catfile($dest, $app);
+   copy ($0, $fullapp);
    if (! -e $fullapp) {
-      print("$fullapp doesn't exist! copying it from $0...\n");
-      copy ($0, $fullapp);
-      if (! -e $fullapp) {
-         print("$fullapp creation failed, exiting :-(\n");
-         exit;
-      }
+      print("$fullapp creation failed, exiting :-(\n");
+      exit;
    }
+   if (compare($0, $fullapp)) {
+      printf ("File not copied correctly. Perhaps you have a permission problem writing to $fullapp ?\n");
+      exit;
+   }
+   # create empty user setting files
    for my $ini_file ("slicer4rtn.ini", "slic3r.ini") {
       my $ini = catfile($app_path[1], $ini_file);
       if (! -e $ini) {
@@ -218,6 +223,24 @@ if($conf->{install}) {
             print("$ini creation failed, exiting :-(\n");
             exit;
          }
+      }
+   }
+   # copy global setting files
+   my $dir = catfile(dirname($0), "settings");
+   opendir(DIR, $dir);
+   my @files = readdir(DIR);
+   for my $f (@files) {
+      next if($f =~ /^[\.]{1,2}$/);
+      my $sf = catfile($dir, $f);
+      copy($sf, $app_path[0]);
+      my $df = catfile($app_path[0], $f);
+      if (! -e $df) {
+         print("$df creation failed, exiting :-(\n");
+         exit;
+      }
+      if (compare($sf, $df)) {
+         printf ("File not copied correctly. Perhaps you have a permission problem writing to $df ?\n");
+         exit;
       }
    }
    exit;
