@@ -57,6 +57,7 @@ my $fullapp;
 my $home;
 my $dest;
 my @app_path;
+my $slicer;
 
 $app = basename($0);
 my $username = getlogin || $ENV{LOGNAME} || $ENV{USER} || getpwuid($<);
@@ -68,9 +69,8 @@ if ("$^O" eq "linux") {
    $dest = "/usr/local/bin";
 } elsif ($^O eq "MSWin32") {
    #($app) = ($0=~/\\([^\\]+)$/);
-   @app_path = ("C:\\Program Files\\$app","C:\\Documents and Settings\\$username\\Application Data\\$app");
+   @app_path = (catfile($ENV{"PROGRAMDATA"}, $app), catfile($ENV{"APPDATA"}, $app));
    $home = $ENV{"USERPROFILE"};
-   $dest = catfile($home, "bin");
 } else {
    print("Unsupported OS $^O");
    exit;
@@ -132,14 +132,21 @@ my @fs;
 my @slicer_args_cli;
 my @transform;
 
+if (defined  $conf->{slicer}) {
+      $slicer = basename($conf->{slicer});
+      $slicer =~ s/\.[\w\d]+$//;
+      if ($conf->{slicer} ne $slicer) {
+         print("Slicer is $slicer\n") if($conf->{verbose});
+      }
+}
+
 foreach(@ARGV) {                            # -- preprocess all command-line arguments
    my($s,$k,$v);
 
    if(/^--(slicer)\.([\w\-]+)=(.*)/) {      # -- slicer specific declared
-      $s = $1, $k = $2, $v = $3;
       push(@slicer_args_cli,
-         $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
-         $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v"
+         $slicer eq 'mandoline' ? ("-S","$k=$v") : 
+         $slicer =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v"
       );
       next;
    }
@@ -148,11 +155,16 @@ foreach(@ARGV) {                            # -- preprocess all command-line arg
       my $k_ = $k; $k_ =~ s/\-/_/g;
       if(!defined $conf->{$k_} && !defined $confUnset->{$k_}) {               # -- slicer args
          push(@slicer_args_cli,
-            $conf->{slicer} eq 'mandoline' ? ("-S","$k=$v") : 
-            $conf->{slicer} =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
+            $slicer eq 'mandoline' ? ("-S","$k=$v") : 
+            $slicer =~ /Cura/ ? ("-s","$k=$v") : "--$k=$v");
       } elsif($k_ =~ /^(rotate|translate|scale)$/) {
          push(@transform,"$k_=$v");
       } else {
+         if ($k_ eq "slicer") {
+            $slicer = basename($v);
+            $slicer =~ s/\.[\w\d]+$//;
+            print("Slicer is $slicer\n") if($conf->{verbose});
+         }
          $conf->{$k_} = $v;                                                   # -- general settings
       }
       next;
@@ -176,6 +188,7 @@ if($conf->{version}) {
 # Install script...
 #
 if($conf->{install}) {
+   $dest = catfile($conf->{user} ? $home : $ENV{"PROGRAMDATA"}, "bin");
    for my $d ($dest, $app_path[1]) {
       if (! -d $d) {
          print ($d , " doesnt exist! Creating it...\n");
@@ -213,19 +226,19 @@ if($conf->{install}) {
 my $lhc = $conf->{layer_height}/cos($conf->{angle}/180*pi());
 
 # -- now we know slicer, add sane & important settings, and convert CLI opts into slicer args
-if($conf->{slicer} =~ /(slic3r|prusa)/) {
-   push(@slicer_args,'--gcode-comments','--skirts=0', ($conf->{slicer}=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
+if($slicer =~ /(slic3r|prusa)/) {
+   push(@slicer_args,'--gcode-comments','--skirts=0', ($slicer=~/prusa/?'--center=':'--print-center=').("0,0"||$conf->{center}));
       #'--before-layer-gcode=;LAYER:[layer_num]');  # -- make it Cura compatible to catch layer change
-   push(@slicer_args,'-s') if($conf->{slicer}=~/prusa/);    # -- slice G-code
+   push(@slicer_args,'-s') if($slicer=~/prusa/);    # -- slice G-code
    push(@slicer_args,'--layer-height='.$lhc);
    push(@slicer_args,'--start-gcode=;') if(defined $conf->{start_gcode});
    push(@slicer_args,'--end-gcode=;') if(defined $conf->{end_gcode});
-   foreach my $s ($conf->{slicer}) {
+   foreach my $s ($slicer) {
       push(@slicer_args,"--load=".catfile($app_path[0], "$s.ini")) if(-e catfile($app_path[0], "$s.ini"));
       push(@slicer_args,"--load=".catfile($app_path[1], "$s.ini")) if(-e catfile($app_path[1], "$s.ini"));
    }
 
-} elsif($conf->{slicer} =~ /mandoline$/) {
+} elsif($slicer =~ /mandoline$/) {
    push(@slicer_args,'-S','layer_height='.$lhc);
    push(@slicer_args,'--no-support','--no-raft','-n','-S','bed_center_x=0','-S','bed_center_y=0');
    push(@slicer_args,'--start-gcode=;') if(defined $conf->{start_gcode});
@@ -237,7 +250,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
       }
    }
    
-} elsif($conf->{slicer} =~ /CuraEngine$/) {
+} elsif($slicer =~ /CuraEngine$/) {
    push(@slicer_args,'-s','layer_height='.$lhc);
    push(@slicer_args,'-s','support_enable=false','-s','skirt_line_count=0','-s','brim_line_count=0','-s','support_brim_line_count=0');
    push(@slicer_args,'-s','machine_start_gcode=;') if(defined $conf->{start_gcode});
@@ -249,7 +262,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
       }
    }
 
-} elsif($conf->{slicer} =~ /CuraEngineLegacy$/) {
+} elsif($slicer =~ /CuraEngineLegacy$/) {
    push(@slicer_args,'-s','autoCenter=0','-s','objectPosition.X=0','-s','objectPosition.Y=0','-s','layerThickness='.$lhc*1000,
       '-s','skirtLineCount=0','-s','downSkinCount=3','-s','upSkinCount=3','-s','filamentDiameter=1750');
    foreach my $p (@app_path) {
@@ -258,7 +271,7 @@ if($conf->{slicer} =~ /(slic3r|prusa)/) {
          push(@slicer_args,'-s',"$k=$c->{$k}");
       }
    }
-} elsif($conf->{slicer} =~ /cura-slicer$/) {
+} elsif($slicer =~ /cura-slicer$/) {
    push(@slicer_args,"-vv") if($conf->{verbose});
    push(@slicer_args,'--layer_height='.$lhc);
    push(@slicer_args,'--machine_start_gcode=;') if(defined $conf->{start_gcode});
@@ -280,6 +293,7 @@ if($conf->{help} || @fs <= 0) {
       -v or --verbose      increase verbosity
       --version            display version and exit
       --install            perform initial install
+      --user               only relevant when used with --install on a Windows machine - install for current user or all system users
       -k or --keep         keep all temporary files (temp.stl, temp.gcode)
       --rotate=<x,y,z>     rotate model
       --translate=<x,y,z>  translate model
@@ -373,7 +387,7 @@ foreach my $fn (@fs) {
    my($tmp_gcode,$tmp_model) = (catfile(".", "tmp-$$.gcode"),catfile(".", "tmp-$$.$conf->{intern_format}"));
    print "   3/5 write temporary model\n";
 
-   $tmp_model =~ s/\.\w+$/.stl/ if($conf->{slicer} =~ /(cura|mandoline)/i);      # -- cura & mandoline only manage STL
+   $tmp_model =~ s/\.\w+$/.stl/ if($slicer =~ /(cura|mandoline)/i);      # -- cura & mandoline only manage STL
 
    writeModel($tmp_model,$m);
    push(@rm,$tmp_model);
@@ -381,12 +395,12 @@ foreach my $fn (@fs) {
    print "   4/5 slice ($conf->{slicer}) model\n";
    if(fork()==0) {
       my(@a) = ($conf->{slicer});
-      push(@a,$conf->{slicer} =~ /CuraEngine$/ ? 
+      push(@a,$slicer =~ /CuraEngine$/ ? 
          ("slice","-j",catfile($app_path[0], "fdmprinter.def.json"),"-s","machine_center_is_zero=true","-s","extruder_nr=0",@slicer_args,"-o",$tmp_gcode,"-l",$tmp_model) :
          (@slicer_args,"-o",$tmp_gcode,$tmp_model) );
       print "$app INF: @a\n" if($conf->{verbose});
       # -- is important, as CuraEngine is chatty and closing only STDERR will pollute the resulting G-code with error messages(!!)
-      close STDERR, close STDOUT if($conf->{slicer} =~ /CuraEngine$/ && $conf->{verbose}==0);      
+      close STDERR, close STDOUT if($slicer =~ /CuraEngine$/ && $conf->{verbose}==0);      
       exec(@a);
       exit 0;
    }
@@ -394,7 +408,7 @@ foreach my $fn (@fs) {
    if(!-e "$tmp_gcode") {
       print "$app ERROR: slicer did not generate any gcode, abort.\n";
       print "$app HINT: execute with -v to see the actual problem\n" unless($conf->{verbose});
-      print "$app HINT: increase --subdivide=.. more and try again, or use --slicer=slic3r instead\n" if($conf->{slicer}=~/prusa/);
+      print "$app HINT: increase --subdivide=.. more and try again, or use --slicer=slic3r instead\n" if($slicer=~/prusa/);
       unlink @rm unless($conf->{keep});
       exit -1;
    }
@@ -523,7 +537,7 @@ sub mapGcode {
    #                   off = tot - min - tot/2
    
    my($ixoff,$iyoff) = (0,0);
-   if($conf->{slicer}=~/(slic3r|prusa)/) {
+   if($slicer=~/(slic3r|prusa)/) {
       $ixoff = $m->{size}[0] - abs($m->{min}[0]) - $m->{size}[0] / 2;
       $iyoff = $m->{size}[1] - abs($m->{min}[1]) - $m->{size}[1] / 2;
    }
