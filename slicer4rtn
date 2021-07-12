@@ -55,23 +55,19 @@ my $VERSION = '0.6.0';
 
 my $app;
 my $fullapp;
-my $home;
 my $dest;
 my @app_path;
 my $slicer;
 
 $app = basename($0);
-my $username = getlogin || $ENV{LOGNAME} || $ENV{USER} || getpwuid($<);
 
 if ("$^O" eq "linux") {
    #($app) = ($0=~/\/([^\/]+)$/);
    @app_path = ("/usr/share/$app","$ENV{HOME}/.config/$app");
-   $home = $ENV{"HOME"};
    $dest = "/usr/local/bin";
 } elsif ($^O eq "MSWin32") {
    #($app) = ($0=~/\\([^\\]+)$/);
    @app_path = (catfile($ENV{"PROGRAMDATA"}, $app), catfile($ENV{"APPDATA"}, $app));
-   $home = $ENV{"USERPROFILE"};
 } else {
    print("Unsupported OS $^O");
    exit;
@@ -189,7 +185,7 @@ if($conf->{version}) {
 # Install script...
 #
 if($conf->{install}) {
-   $dest = catfile(catfile(($conf->{user} ? $home : $ENV{"PROGRAMDATA"}), $app), "bin");
+   $dest = catfile(catfile($ENV{"PROGRAMDATA"}, $app), "bin");
    # create user and glogal setting dirs
    for my $d (@app_path, $dest) {
       if (! -d $d) {
@@ -316,7 +312,6 @@ if($conf->{help} || @fs <= 0) {
       -v or --verbose      increase verbosity
       --version            display version and exit
       --install            perform initial install
-      --user               only relevant when used with --install on a Windows machine - install for current user or all system users
       -k or --keep         keep all temporary files (temp.stl, temp.gcode)
       --rotate=<x,y,z>     rotate model
       --translate=<x,y,z>  translate model
