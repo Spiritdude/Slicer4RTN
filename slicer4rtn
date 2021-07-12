@@ -62,11 +62,9 @@ my $slicer;
 $app = basename($0);
 
 if ("$^O" eq "linux") {
-   #($app) = ($0=~/\/([^\/]+)$/);
    @app_path = ("/usr/share/$app","$ENV{HOME}/.config/$app");
    $dest = "/usr/local/bin";
 } elsif ($^O eq "MSWin32") {
-   #($app) = ($0=~/\\([^\\]+)$/);
    @app_path = (catfile($ENV{"PROGRAMDATA"}, $app), catfile($ENV{"APPDATA"}, $app));
 } else {
    print("Unsupported OS $^O");
